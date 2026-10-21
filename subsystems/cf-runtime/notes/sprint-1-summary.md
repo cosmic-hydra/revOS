@@ -3,8 +3,11 @@
 Scope: the run-loop / event / plug-in ABI surface of CoreFoundation
 (`CFRunLoop*`, `CFNotificationCenter*`, `CFSocket*`, `CFStream*`, `CFPlugIn*`).
 
-26 evidence records, all conforming to `evidence/schema.json`.
-21 `observed` @ 0.9, 3 `deduced` @ 0.5, 2 `unknown` @ 0.0 (see *Unknowns*).
+26 evidence records, all conforming to `evidence/schema.json`:
+**23 `observed` @ 0.9, 3 `deduced` @ 0.5, 0 `unknown`**. Three further questions
+remain open and are written up in §4 as prose rather than as `claim_status: unknown`
+records — each still has partial observed evidence attached to it, so an `unknown`
+record would understate what was actually seen.
 
 ---
 
@@ -121,9 +124,10 @@ Two briefed subjects **do not exist** as named. Recorded as `deduced`, not
 
 Also absent: `CFRunLoopRunUntilDate` and a generic `CFStreamGetTypeID`.
 
-## 4. Unknowns
+## 4. Open questions
 
-Kept at `unknown` / `0.0` rather than guessed:
+Deliberately not written as `claim_status: unknown` records, because each has
+partial observed evidence attached; none is guessed at:
 
 1. **Run-loop internals.** We have the export table only. How `CFRunLoopRunInMode`
    multiplexes sources, timers and observers, and its `mach_msg` integration, is
