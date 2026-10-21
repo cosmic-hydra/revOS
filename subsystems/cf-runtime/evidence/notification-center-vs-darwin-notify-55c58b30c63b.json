@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-runtime",
+  "subject": "CFNotificationCenterGetDarwinNotifyCenter",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-runtime/notify-exports.txt",
+    "sha256": "a9629368bd08d2c82abec66d8c1a9517a082c0960123f6111e39af535e30ed9b",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation ; dyld_info -exports /usr/lib/system/libsystem_notify.dylib",
+    "summary": "CoreFoundation ships no standalone Mach-O on macOS 27 (/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation is a broken symlink); its image is resident in the arm64e dyld shared cache (sha256 ecc822c56dbce82d0f151afd7bf8492e91b109944483614f0eaaf377ac7d21da), so otool-exports and nm-symbols both return status=tool-failed against this path. dyld_info resolves the canonical path through the cache and reads the image's LC_DYLD_EXPORTS_TRIE directly. source_artifact is the verbatim dyld_info export dump captured to the cache directory, which is the observed artifact. _CFNotificationCenterGetDarwinNotifyCenter appears in the export trie as a function entry in the image's __TEXT segment (__TEXT spans 0x1808CD000-0x180D5D428 in the cache). Separately, libsystem_notify.dylib, like CoreFoundation, ships no standalone Mach-O on macOS 27 and was read through the same arm64e dyld shared cache via dyld_info. Its export trie contains notify_post and notify_register_check but NOT notify_new, so the Darwin notify centre is built on the check-and-register token API.",
+    "raw_output_excerpt": "CF:     0x0003D64C  _CFNotificationCenterGetDarwinNotifyCenter\nCF:     0x0003D454  _CFNotificationCenterGetLocalCenter\nnotify: 0x00003AD8  _notify_post\nnotify: 0x00000B38  _notify_register_check\n(no _notify_new symbol in libsystem_notify.dylib)"
+  },
+  "claim": "CoreFoundation exposes three distinct notification centres - local, distributed and DarwinNotify - and on macOS 27 the DarwinNotify centre is backed by the libsystem_notify notify_post / notify_register_check token API rather than the notify_new API.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CFNotificationCenter.h - GetDarwinNotifyCenter",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFNotificationCenter.h"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -w '_CFNotificationCenterGetDarwinNotifyCenter'\ndyld_info -exports /usr/lib/system/libsystem_notify.dylib > /Users/vaithianathan/revOS-work/cache/cf-runtime/notify-exports.txt\nshasum -a 256 /Users/vaithianathan/revOS-work/cache/cf-runtime/notify-exports.txt\ngrep -E '_notify_(post|new|register_check)' /Users/vaithianathan/revOS-work/cache/cf-runtime/notify-exports.txt"
+}

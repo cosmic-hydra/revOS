@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-runtime",
+  "subject": "CFRunLoopSourceContext",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt",
+    "sha256": "55c58b30c63b3a31b3a150a27db1fd09cbac51269ae4918d9f9940de730dea95",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+    "summary": "CoreFoundation ships no standalone Mach-O on macOS 27 (/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation is a broken symlink); its image is resident in the arm64e dyld shared cache (sha256 ecc822c56dbce82d0f151afd7bf8492e91b109944483614f0eaaf377ac7d21da), so otool-exports and nm-symbols both return status=tool-failed against this path. dyld_info resolves the canonical path through the cache and reads the image's LC_DYLD_EXPORTS_TRIE directly. source_artifact is the verbatim dyld_info export dump captured to the cache directory, which is the observed artifact. CFRunLoopSourceContext is a struct and emits no symbol in the export trie; it is passed by pointer to _CFRunLoopSourceCreate and returned by _CFRunLoopSourceGetContext, both of which are exported.",
+    "raw_output_excerpt": "        0x0015A298  _CFRunLoopContainsTimer\n        0x0006A120  _CFRunLoopAddObserver\n(no CFRunLoopSourceContext symbol; see _CFRunLoopSourceCreate in mirror header)"
+  },
+  "claim": "CFRunLoopSourceContext is a versioned callback-vtable struct that carries the perform/schedule/cancel callbacks for a run-loop source; it has no Mach-O symbol of its own and is exchanged by pointer through the exported CFRunLoopSourceCreate and CFRunLoopSourceGetContext functions.",
+  "claim_status": "deduced",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CFRunLoop.h - CFRunLoopSourceContext struct and CFRunLoopSourceCreate",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFRunLoop.h"
+    }
+  ],
+  "confidence": 0.5,
+  "reproducer": "mkdir -p /Users/vaithianathan/revOS-work/cache/cf-runtime\ndyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation > /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt\nshasum -a 256 /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt\ngrep -w '_CFRunLoopSourceContext' /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt"
+}

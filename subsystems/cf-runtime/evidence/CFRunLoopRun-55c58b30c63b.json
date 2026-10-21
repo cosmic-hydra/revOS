@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-runtime",
+  "subject": "CFRunLoopRun",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt",
+    "sha256": "55c58b30c63b3a31b3a150a27db1fd09cbac51269ae4918d9f9940de730dea95",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+    "summary": "CoreFoundation ships no standalone Mach-O on macOS 27 (/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation is a broken symlink); its image is resident in the arm64e dyld shared cache (sha256 ecc822c56dbce82d0f151afd7bf8492e91b109944483614f0eaaf377ac7d21da), so otool-exports and nm-symbols both return status=tool-failed against this path. dyld_info resolves the canonical path through the cache and reads the image's LC_DYLD_EXPORTS_TRIE directly. source_artifact is the verbatim dyld_info export dump captured to the cache directory, which is the observed artifact. _CFRunLoopRun appears in the export trie as a function entry in the image's __TEXT segment (__TEXT spans 0x1808CD000-0x180D5D428 in the cache).",
+    "raw_output_excerpt": "        0x000F8008  _CFRunLoopRun"
+  },
+  "claim": "CoreFoundation on macOS 27 exports CFRunLoopRun, the run-loop entry point that runs the default mode until CFRunLoopStop is called, as a __TEXT function symbol.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CFRunLoop.h - CFRunLoopRun declaration",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFRunLoop.h"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "mkdir -p /Users/vaithianathan/revOS-work/cache/cf-runtime\ndyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation > /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt\nshasum -a 256 /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt\ngrep -w '_CFRunLoopRun' /Users/vaithianathan/revOS-work/cache/cf-runtime/cf-exports-corefoundation.txt"
+}
