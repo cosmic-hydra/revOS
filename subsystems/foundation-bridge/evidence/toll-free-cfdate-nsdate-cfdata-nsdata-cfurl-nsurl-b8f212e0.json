@@ -1,0 +1,27 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "CFDate/CFData/CFURL toll-free bridges",
+  "subject_kind": "behavior",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "sha256": "ce52d7d5eaebe090d798565ecfa2db33d9b5730c45236e9b30f750bc5347c9c4",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "summary": "Single runtime probe verifies three more toll-free bridges by constructing NSData, NSDate, NSURL and casting them to CFTypeRef. CFGetTypeID() returns 20 (CFData), 42 (CFDate), and 29 (CFURL) — each matched against CFDataGetTypeID/CFDateGetTypeID/CFURLGetTypeID() respectively.",
+    "raw_output_excerpt": "NSDate   -> CFDate:   ns=0xaae88ee232d3cc89 cf=OK (id match? expected=42 got=42)\nNSData   -> CFData:   ns=0x10102d4e0     cf=OK (id match? expected=20 got=20)\nNSURL    -> CFURL:    ns=0x10102d650     cf=OK (id match? expected=29 got=29)"
+  },
+  "claim": "On this host CFDateRef, CFDataRef, and CFURLRef are each identity-preserved with their NSDate, NSData, and NSURL counterparts and report matching CFTypeIDs (42, 20, 29 respectively); these three additional toll-free bridges are observed and confirmed.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "_tollFreeBridgedTypes",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/Foundation.h"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -framework CoreFoundation -o /tmp/bridge /tmp/bridge.m && /tmp/bridge | grep -E 'NSDate|NSData|NSURL'"
+}

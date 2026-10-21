@@ -1,0 +1,32 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "objc_autoreleasePoolPush/objc_autoreleasePoolPop/_objc_rootAutorelease",
+  "subject_kind": "symbol",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/ar",
+    "sha256": "abe7144f48d9281e7d9ce5b79dc5ec60e77f6a1ebd84d6c92728c88dc3ef5e3a",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/ar",
+    "summary": "A runtime probe compiled against Foundation calls dlsym(RTLD_DEFAULT, \"objc_autoreleasePoolPush\"), dlsym(RTLD_DEFAULT, \"objc_autoreleasePoolPop\"), and dlsym(RTLD_DEFAULT, \"_objc_rootAutorelease\"). All three resolve to non-null addresses that match a closure of the runtime (PIC-shifted symbol patterns), confirming the ObjC runtime autorelease hooks are reachable at runtime on this host.",
+    "raw_output_excerpt": "push=0x122580018e22a4f8 pop=0x6d5b00018e22a76c root_auto=0x760f00018e22d8a4"
+  },
+  "claim": "objc_autoreleasePoolPush, objc_autoreleasePoolPop, and _objc_rootAutorelease are exported by the Objective-C runtime that ships with this Foundation — they resolve via dlsym(RTLD_DEFAULT, ...) to live function pointers when a process has loaded Foundation.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/objc4",
+      "label": "objc4 runtime source containing objc_autoreleasePoolPush/Pop",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/objc-loadmethod.mm"
+    },
+    {
+      "upstream": "opensource-apple/objc4",
+      "label": "NSObject.mm autorelease entry point",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/NSObject.mm"
+    }
+  ],
+  "confidence": 0.85,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -o /tmp/ar /tmp/ar.m && /tmp/ar"
+}

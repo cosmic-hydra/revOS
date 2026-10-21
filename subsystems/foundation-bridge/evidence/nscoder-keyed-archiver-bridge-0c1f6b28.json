@@ -1,0 +1,27 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "NSKeyedArchiver.archivedDataWithRootObject:",
+  "subject_kind": "symbol",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls3",
+    "sha256": "dfa338ebe605f7ee414df6813cb1ffffba902adc325e9bbc1d7faca7661bb7a8",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls3",
+    "summary": "Runtime probe iterates class_copyMethodList() on NSKeyedArchiver and NSKeyedUnarchiver. NSKeyedArchiver exposes the canonical archiving entry points as class methods: +archivedDataWithRootObject:, +archivedDataWithRootObject:requiringSecureCoding:error:. NSKeyedUnarchiver exposes the matching +unarchiveObjectWithData: and +unarchiveObjectWithData:error:. Both classes inherit from NSCoder. NSCoder's protocol surface (-encodeWithCoder: / -initWithCoder:) is observed as instance methods on every concrete Foundation class (NSString, NSArray, NSDictionary, NSNumber, NSValue, NSDate, NSURL, NSError, NSUUID).",
+    "raw_output_excerpt": "=== NSKeyedArchiver ===\n  +  archivedDataWithRootObject:\n  +  archivedDataWithRootObject:requiringSecureCoding:error:\n  -  encodeObject:\n  -  encodeObject:forKey:\n  -  encodeBool:forKey:\n  -  encodeInt:forKey:\n  -  encodeInt32:forKey:\n  -  encodeInt64:forKey:\n  +  unarchiveObjectWithData:\n  +  unarchiveObjectWithData:error:"
+  },
+  "claim": "NSKeyedArchiver is a NSCoder subclass that exports +archivedDataWithRootObject: (+ the secure-coding variant) as its public class-method entry point, and NSKeyedUnarchiver exports +unarchiveObjectWithData: (+ the throwing variant) — these are the NSCoder / NSKeyedArchiver archive bridge symbols.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "NSKeyedArchiver.swift (Swift reimplementation; same public class API but different signature names)",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/NSKeyedArchiver.swift"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -o /tmp/cls3 /tmp/cls3.m && /tmp/cls3 | grep -E 'archivedData|unarchive'"
+}

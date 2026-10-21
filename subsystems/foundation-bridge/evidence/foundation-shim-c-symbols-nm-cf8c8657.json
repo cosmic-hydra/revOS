@@ -1,0 +1,27 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "Foundation.dylib BridgeSupport re-export shim",
+  "subject_kind": "symbol",
+  "source_artifact": {
+    "path": "/System/Library/Frameworks/Foundation.framework/Versions/C/Resources/BridgeSupport/Foundation.dylib",
+    "sha256": "cf8c865717da3d9c5bce9eb256ea55187be0e3aa876b2bb9d97a7a84fe030b09",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "scripts/bin/nm-symbols --filter='^_NS' /System/Library/Frameworks/Foundation.framework/Versions/C/Resources/BridgeSupport/Foundation.dylib",
+    "summary": "scripts/bin/nm-symbols reports 46 global defined symbols in the Foundation.dylib BridgeSupport re-export shim, all of the form _NSMake*, _NSHeight/_NSWidth/_NSMinX/etc., _NSSwap*, _NSConvertHost*ToSwapped, _NSRange / _NSLocationInRange, _NSMakeCollectable, and the canonical toll-free helpers _CFBridgingRetain / _CFBridgingRelease (126 symbols in the dylib total). This shim is itself a small dyld-reexport stub that pulls in /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300 / current version 5027.0.63) on macOS 27.",
+    "raw_output_excerpt": "_CFBridgingRelease  T\n_CFBridgingRetain   T\n_NSDecimalIsNotANumber  T\n_NSEdgeInsetsMake   T\n_NSEqualRanges      T\n_NSHeight           T\n_NSLocationInRange  T\n_NSMakeCollectable  T\n_NSMakeRange        T\n_NSMakeRect         T\n_NSMakePoint        T\n_NSMakeSize         T\n_NSRange / _NSSwapBig* / _NSSwapLittle* / _NSConvertHost*ToSwapped  (full NSSwap family exported as global T symbols)"
+  },
+  "claim": "On macOS 27 the canonical Foundation framework ships a BridgeSupport re-export dylib (Foundation.dylib, 120 KB, sha256 cf8c8657…) that exports the C-callable _NS* helper family plus the toll-free bridge helpers _CFBridgingRetain / _CFBridgingRelease — these are the only Mach-O-exported symbols for the Foundation framework that are actually on disk; the full ObjC class implementations live in the dyld shared cache.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "Apple Foundation source mirror (closes the gap between the on-disk dylib and the runtime classes)",
+      "url": "https://github.com/apple-oss-distributions/CarbonHeaders"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "scripts/bin/nm-symbols --filter='^_NS' /System/Library/Frameworks/Foundation.framework/Versions/C/Resources/BridgeSupport/Foundation.dylib | jq .observations.symbols | head"
+}

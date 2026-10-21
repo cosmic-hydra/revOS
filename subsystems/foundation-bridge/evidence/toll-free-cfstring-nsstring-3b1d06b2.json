@@ -1,0 +1,32 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "CFStringRef<->NSString*",
+  "subject_kind": "behavior",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "sha256": "ce52d7d5eaebe090d798565ecfa2db33d9b5730c45236e9b30f750bc5347c9c4",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "summary": "Runtime probe creates an NSString via @\"hello\" and casts it as a CFTypeRef via __bridge; CFGetTypeID() returns 7, identical to CFStringGetTypeID() (also 7). Reverse direction: CFStringCreateWithCString returns a CFStringRef whose __bridge NSString* identity equals the CFStringRef pointer, demonstrating identity-preservation. CFBridgingRetain produces a CFStringRef with CFStringGetTypeID(). All four behaviours confirm CFStringRef and NSString* share the same underlying CFTypeID.",
+    "raw_output_excerpt": "NSString -> CFString: ns=0x10076c000 cf=OK (id match? expected=7 got=7)\nCFStringRef round-trip: cf=0xbc2aadda0247ac50 ns=0xbc2aadda0247ac50 CFRetainCount=9223372036854775807\nCFBridgingRetain: retained=0x10076c0a0 type=CFString?YES"
+  },
+  "claim": "On this host (macOS 27 arm64e) CFStringRef is identity-preserved with NSString* under __bridge cast, has CFTypeID 7 matching CFStringGetTypeID(), and round-trips through CFBridgingRetain; this is the canonical toll-free bridge between CFString and NSString.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "_NSString bridge in Bridging.swift (Swift mirror lacks the identity-preserving toll-free cast)",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/Bridging.swift"
+    },
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "_tollFreeBridgedTypes table (private header)",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/Foundation.h"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -framework CoreFoundation -o /tmp/bridge /tmp/bridge.m && /tmp/bridge"
+}

@@ -1,0 +1,27 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "NSAutoreleasePool",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls3",
+    "sha256": "dfa338ebe605f7ee414df6813cb1ffffba902adc325e9bbc1d7faca7661bb7a8",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls3",
+    "summary": "Runtime probe calls class_copyMethodList() on NSAutoreleasePool and observes 9 instance methods: -drain, -initWithCapacity:, -retainCount, -dealloc, -init, -autorelease, -retain, -release, -addObject:. The class also has 6+ class methods (+topAutoreleasePoolCount, +autoreleasedObjectCount, +totalAutoreleasedObjects, +resetTotalAutoreleasedObjects, +autoreleasePoolExists). NSAutoreleasePool super: NSObject.",
+    "raw_output_excerpt": "=== NSAutoreleasePool ===\n  -  drain\n  -  initWithCapacity:\n  -  retainCount\n  -  dealloc\n  -  init\n  -  autorelease\n  -  retain\n  -  release\n  -  addObject:\n  +  autoreleasedObjectCount\n  +  autoreleasePoolExists\n  +  topAutoreleasePoolCount\n  +  resetTotalAutoreleasedObjects\n  +  totalAutoreleasedObjects"
+  },
+  "claim": "NSAutoreleasePool is a live ObjC runtime class on this host (NSObject subclass) with the canonical -drain / -initWithCapacity: / -addObject: method surface and the +topAutoreleasePoolCount / +totalAutoreleasedObjects / +autoreleasedObjectCount / +autoreleasePoolExists class methods used by introspection tools.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "NSAutoreleasePool.h header (ARC-unavailable)",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/Foundation/NSAutoreleasePool.h"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -o /tmp/cls3 /tmp/cls3.m && /tmp/cls3 | sed -n '/=== NSAutoreleasePool ===/,/=== /p'"
+}

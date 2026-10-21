@@ -1,0 +1,27 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "CFNumberRef<->NSNumber*",
+  "subject_kind": "behavior",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "sha256": "ce52d7d5eaebe090d798565ecfa2db33d9b5730c45236e9b30f750bc5347c9c4",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/bridge",
+    "summary": "Runtime probe creates an NSNumber via @42 and casts it as CFTypeRef; CFGetTypeID() returns 22, identical to CFNumberGetTypeID() (also 22). NSNumber is also observed as a subclass of NSValue via the runtime probe (super: NSValue).",
+    "raw_output_excerpt": "NSNumber -> CFNumber: ns=0x10076c110 cf=OK (id match? expected=22 got=22)\n=== NSNumber ===\n  super: NSValue\n=== NSValue ===\n  super: NSObject"
+  },
+  "claim": "On this host CFNumberRef is identity-preserved with NSNumber* (and NSNumber inherits from NSValue), confirming the CFNumber<->NSNumber toll-free bridge.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "_tollFreeBridgedTypes",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/Foundation.h"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -framework CoreFoundation -o /tmp/bridge /tmp/bridge.m && /tmp/bridge | grep -E '^NSNumber'"
+}

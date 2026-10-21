@@ -1,0 +1,32 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "setValue:forKey:",
+  "subject_kind": "symbol",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "sha256": "2ac3703bd1eee7083720321870269ca487d31335572ee7b06ef1569c2a7b83bc",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "summary": "Runtime probe iterates class_copyMethodList() on NSObject and reports 290 method selectors. The full KVC entry point is observed as instance methods on NSObject: setValue:forKey:, setValue:forKeyPath:, setValue:forUndefinedKey:, setValuesForKeysWithDictionary:, valueForKey:, valueForKeyPath:.",
+    "raw_output_excerpt": "=== NSObject ===\n  method_count=290\n    setValue:forKeyPath:\n    setValue:forUndefinedKey:\n    setValue:forKey:\n    setValuesForKeysWithDictionary:\n    valueForKeyPath:\n    valueForKey:"
+  },
+  "claim": "NSObject is the KVC root class; -setValue:forKey:, -valueForKey:, and the surrounding key-path / undefined-key / dictionary-pairing variants are exported as public instance methods of NSObject (290 total instance methods).",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "NSKeyValueCoding.h public header (Apple ObjC-runtime-coupled)",
+      "url": "https://github.com/apple-oss-distributions/CarbonHeaders/blob/master/Foundation/NSKeyValueCoding.h"
+    },
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "Swift reimplementation lacks KVC as NSObject instance methods (it dispatches via _NSObjectSwift.swift subscript)",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/NSObject.swift"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -o /tmp/cls /tmp/cls.m && /tmp/cls | grep -E 'setValue:|valueForKey'"
+}

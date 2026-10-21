@@ -1,0 +1,32 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "shipped-Foundation-via-runtime vs swift-corelibs-foundation delta",
+  "subject_kind": "behavior",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "sha256": "2ac3703bd1eee7083720321870269ca487d31335572ee7b06ef1569c2a7b83bc",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "summary": "Comparing the runtime class method lists dumped from shipped Foundation against the swift-corelibs-foundation source tree (cached shallowly at /Users/vaithianathan/revOS-work/cache/swift-corelibs-foundation HEAD b40c41e7...). Shipped Foundation's NSObject has 290 instance methods including full KVC (setValue:forKey:, valueForKey:, setValue:forKeyPath:, valueForKeyPath:, setValuesForKeysWithDictionary:, mutableArrayValueForKey:) and full KVO (addObserver:forKeyPath:options:context:, removeObserver:forKeyPath:, observeValueForKeyPath:ofObject:change:context:, plus the private _addObserver:forProperty:_ family); swift-corelibs-foundation's NSObject.swift implements only isEqual/hash/description/copy/mutableCopy/classForCoder/classForKeyedArchiver/replacementObject(classForKeyedUnarchiver and no KVC / KVO methods at all. NSNumber runs NSValue on shipped (super NSValue) but ships its own _cfTypeID override; swift-corelibs mirrors this with an internal _cfTypeID ivar on NSObject but skips the runloop ↔ CFRunLoop bridge (-getCFRunLoop is absent from RunLoop.swift in the Swift mirror).",
+    "raw_output_excerpt": "shipped-NSObject (runtime):\n  method_count=290\n    setValue:forKey: valueForKey: setValue:forKeyPath: valueForKeyPath:\n    setValuesForKeysWithDictionary: mutableArrayValueForKey:\n    addObserver:forKeyPath:options:context: removeObserver:forKeyPath:\n    observeValueForKeyPath:ofObject:change:context:\n    _addObserver:forProperty:options:context: _removeObserver:forProperty:\nswift-corelibs-foundation/NSObject.swift (sources/Foundation/NSObject.swift, 419 lines):\n  public init() {}\n  open func isEqual/open var hash/open var description/... none of setValue:/valueForKey:\n  no addObserver: forKeyPath: methods, no KVC/KVO at all"
+  },
+  "claim": "swift-corelibs-foundation does NOT implement KVC setValue:/valueForKey: or KVO addObserver:/observeValueForKeyPath:ofObject:change: on its NSObject; it also lacks the -getCFRunLoop NSRunLoop bridge. Shipped Foundation has all of these as public instance methods on the runtime classes. This is the largest single delta between the Swift mirror and the binary runtime surface observed on this host.",
+  "claim_status": "deduced",
+  "cross_reference": [
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "cached shallow clone (HEAD b40c41e7) — open class NSObject is Swift-native, no KVC/KVO selectors",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/NSObject.swift"
+    },
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "RunLoop.swift lacks -getCFRunLoop bridge",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/RunLoop.swift"
+    }
+  ],
+  "confidence": 0.6,
+  "reproducer": "(shipped) /tmp/cls | grep -E 'setValue:|valueForKey|addObserver'\n(swift-corelibs) grep -E 'func setValue|func valueForKey|func addObserver' /Users/vaithianathan/revOS-work/cache/swift-corelibs-foundation/Sources/Foundation/NSObject.swift"
+}

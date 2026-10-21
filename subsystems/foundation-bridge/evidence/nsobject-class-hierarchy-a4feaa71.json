@@ -1,0 +1,32 @@
+{
+  "subsystem": "foundation-bridge",
+  "subject": "NSObject",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "sha256": "2ac3703bd1eee7083720321870269ca487d31335572ee7b06ef1569c2a7b83bc",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "/Users/vaithianathan/revOS-work/cache/foundation-bridge/cls",
+    "summary": "A runtime probe compiled with clang against the Foundation framework header enumerates the class-hierarchy parent of NSObject by calling objc_getClass(\"NSObject\"), class_getSuperclass(), class_copyMethodList(), and class_copyMethodList(object_getClass(...)). NSObject resolves at runtime; its superclass pointer is NULL (root class). NSString, NSMutableString, NSArray, NSMutableArray, NSDictionary, NSMutableDictionary, NSNumber, NSValue, NSDate, NSURL, NSError, NSUUID, NSAutoreleasePool, NSRunLoop, NSKeyedArchiver, NSKeyedUnarchiver, and NSCoder are all observed as live ObjC runtime classes — every one reports NSObject as its superclass chain root.",
+    "raw_output_excerpt": "=== NSObject ===\n  method_count=290\n  super: <NULL>  (root class)\n=== NSString ===\n  super: NSObject\n  method_count=306\n=== NSMutableString ===\n  super: NSString\n  method_count=32\n=== NSArray ===\n  super: NSObject\n=== NSMutableArray ===\n  super: NSArray\n=== NSDictionary ===\n  super: NSObject\n=== NSMutableDictionary ===\n  super: NSDictionary\n=== NSNumber ===\n  super: NSValue\n=== NSValue ===\n  super: NSObject\n=== NSDate ===\n  super: NSObject\n=== NSURL ===\n  super: NSObject\n=== NSError ===\n  super: NSObject\n=== NSUUID ===\n  super: NSObject\n=== NSAutoreleasePool ===\n  super: NSObject\n=== NSRunLoop ===\n  super: NSObject\n=== NSCoder ===\n  super: NSObject\n=== NSKeyedArchiver ===\n  super: NSCoder\n=== NSKeyedUnarchiver ===\n  super: NSCoder"
+  },
+  "claim": "NSObject is the root class of the Foundation Objective-C hierarchy on this host and is the superclass (directly or transitively) of NSString, NSMutableString, NSArray, NSMutableArray, NSDictionary, NSMutableDictionary, NSNumber (via NSValue), NSValue, NSDate, NSURL, NSError, NSUUID, NSAutoreleasePool, NSRunLoop, NSCoder, NSKeyedArchiver, and NSKeyedUnarchiver.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "swift-corelibs-foundation",
+      "label": "NSObject definition (pure Swift reimplementation)",
+      "url": "https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/NSObject.swift"
+    },
+    {
+      "upstream": "opensource-apple/foundation",
+      "label": "Apple Foundation NSObject header",
+      "url": "https://github.com/apple-oss-distributions/objc4/blob/main/runtime/Foundation.h"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "clang -arch arm64e -fobjc-arc -framework Foundation -o /tmp/cls /tmp/cls.m && /tmp/cls > /Users/vaithianathan/revOS-work/cache/foundation-bridge/cls.out\n# /tmp/cls.m source:\n#   #import <Foundation/Foundation.h>\n#   #import <objc/runtime.h>\n#   (loop over class names; print class_getName(class_getSuperclass(cls)) and class_copyMethodList count)"
+}
