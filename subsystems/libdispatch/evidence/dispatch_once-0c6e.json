@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_once",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_once is defined in __TEXT,__text of the arm64e slice at offset 0x00006548; the public C name dispatch_once resolves via underscore rename.",
+    "raw_output_excerpt": "0x00006548 T _dispatch_once"
+  },
+  "claim": "dispatch_once is exported by libdispatch (macOS 27 / arm64e) as _dispatch_once at offset 0x6548. It is the canonical Apple recursive-once primitive and is NOT interchangeable with C11 <threads.h> call_once, which has different memory-ordering guarantees and a different ABI; any tools/tooling that substitute call_once for dispatch_once are observing a different behavior than Apple's pinned-once primitive.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "once.c: public dispatch_once entry (predicate+block)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/once.c#L29"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "once.h: DISPATCH_EXPORT dispatch_once prototype",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/once.h#L74"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_once$|dispatch_once$'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_once; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_once"
+}

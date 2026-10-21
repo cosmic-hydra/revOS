@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_async",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_async is defined in __TEXT,__text of the arm64e slice at offset 0x00008827; the public C name dispatch_async resolves to this symbol via the standard Apple leading-underscore rename, confirmed by the symbol appearing in the undefined-symbol list of consumer test builds.",
+    "raw_output_excerpt": "0x00008827 T _dispatch_async"
+  },
+  "claim": "dispatch_async is exported by libdispatch (macOS 27 / arm64e) as a defined global text symbol _dispatch_async at offset 0x8827, with the public macro-free name dispatch_async resolving through Apple's standard leading-underscore rename when a C source file references the SDK prototype.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "queue.c: public dispatch_async entry (block trampoline)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/queue.c#L962"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "queue.h: DISPATCH_EXPORT dispatch_async prototype",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/queue.h#L6214"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_async$|dispatch_async$'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_async; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_async"
+}

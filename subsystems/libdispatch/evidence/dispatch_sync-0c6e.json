@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_sync",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_sync is defined in __TEXT,__text at offset 0x0000917a (arm64e); the public name dispatch_sync resolves via underscore rename. The internal alias _dispatch_sync_recurse and the function form _dispatch_sync_f are also defined. _dispatch_sync_f appears at arm64e offset 0x8C32, _dispatch_sync at 0x917A.",
+    "raw_output_excerpt": "0x0000917a T _dispatch_sync\n0x00008C32 T _dispatch_sync_f"
+  },
+  "claim": "dispatch_sync is exported by libdispatch (macOS 27 / arm64e) as a defined global text symbol _dispatch_sync at offset 0x917A, with the public C name dispatch_sync resolving through Apple's leading-underscore rename. The internal _dispatch_sync_recurse path observed in OSS queue.c:1840 is inlined or stripped in the shipped arm64e binary, while the function-form _dispatch_sync_f remains a separate exported anchor.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "queue.c: public dispatch_sync entry",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/queue.c#L2011"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "queue.c: _dispatch_sync_recurse internal helper",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/queue.c#L1840"
+    }
+  ],
+  "confidence": 0.85,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_sync$|_dispatch_sync_f$|dispatch_sync$'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_sync; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_sync"
+}

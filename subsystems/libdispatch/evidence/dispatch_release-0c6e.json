@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_release",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "A bare-name match for the regex anchor 'dispatch_release$' on the arm64e slice yields zero lines. The arm64e binary does export _dispatch_release (offset 0x45E4) -- the internal leading-underscore form that the OSS public macro dispatch_release() in src/object.c:216 de-sugars to -- but no public-name dispatch_release symbol is in the arm64e export trie. This is consistent with the Swift/ARC migration of GCD ownership away from explicit dispatch_release, where modern clients compile dispatch_release calls to objc_release/_os_object_release and the legacy public symbol was deliberately retired from the export trie.",
+    "raw_output_excerpt": "0x000045E4 T _dispatch_release\n# (no line matches '^[0-9a-fA-F]+ T dispatch_release$')"
+  },
+  "claim": "The public function dispatch_release is ABSENT from the arm64e export trie of libdispatch (macOS 27). Only the underscored internal symbol _dispatch_release (offset 0x45E4 on arm64e) is exported. This absence is the canonical signature of the GCD-to-ARC ownership migration: the OSS public macro dispatch_release(dou) at src/object.c:216 is now compiled out at the call site (the dispatch/header makes it a no-op under -DOS_OBJECT_USE_OBJC) and the function-form symbol was therefore retired from the public export trie in shipped libdispatch. Tools or bindings that look up 'dispatch_release' directly from dlsym() will fail; the supported path is the underscored _dispatch_release, _os_object_release, or objc_release depending on the object kind.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "object.c: public dispatch_release entry (OSS -- absent in shipped)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/object.c#L216"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "object.h: dispatch_release macro definition (no-op under ARC)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/object.h#L331"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '^[0-9a-fA-F]+ T dispatch_release$'\n# expect zero output -- the public anchor is gone\nnm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_release$'\n# expect a single line: 0x000045E4 T _dispatch_release"
+}

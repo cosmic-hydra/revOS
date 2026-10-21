@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_source_type_data_add",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "Counting _dispatch_source_type_* anchors in the arm64e export trie yields 19. The exported set excludes _dispatch_source_type_after, which is present in OSS source.c:1429 (used by dispatch_after to build a one-shot timer source). The 20 OSS anchors differ from the 19 shipped by exactly the absent _dispatch_source_type_after; no other name in the family diverges.",
+    "raw_output_excerpt": "0x00068240  __dispatch_source_type_data_add\n0x00068280  __dispatch_source_type_data_or\n0x000682C0  __dispatch_source_type_data_replace\n... 16 more __dispatch_source_type_* anchors ..."
+  },
+  "claim": "The shipped libdispatch arm64e binary exports 19 _dispatch_source_type_* anchors (one each for data_add, data_or, data_replace, read, write, signal, timer, interval, proc, vnode, vfs, sock, nw_channel, memorypressure, memorystatus, vm, exclaves_notification, mach_send, mach_recv), one fewer than the 20 anchors in OSS source.c because _dispatch_source_type_after is OSS-only -- the shipped binary builds dispatch_after timers via _dispatch_after's tail-call to a private helper rather than through an exported source-type vtable.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "source.c: dispatch_after via _dispatch_source_type_after",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/source.c#L1429"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "source.h: dispatch_source_type_* family prototypes",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/source.h#L589"
+    }
+  ],
+  "confidence": 0.75,
+  "reproducer": "dyld_info -exports /usr/lib/system/introspection/libdispatch.dylib | grep -c '_dispatch_source_type_'\ndyld_info -exports /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_source_type_after$'\n# expect: 38 across both archs (19 arm64e + 19 x86_64), and zero matches for _dispatch_source_type_after"
+}

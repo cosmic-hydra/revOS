@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_io_create",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_io_create is defined at arm64e offset 0x0002C640 (the read/write/path trio's underlying constructor); _dispatch_io_create_f at 0x0002C9FD and the public dispatch_io_create trio in src/io.c share the same struct anchor.",
+    "raw_output_excerpt": "0x0002C640 T _dispatch_io_create\n0x0002C9FD T _dispatch_io_create_f\n0x0002D00D T _dispatch_io_create_with_io"
+  },
+  "claim": "dispatch_io_create is exported by libdispatch (macOS 27 / arm64e) as a defined global text symbol _dispatch_io_create at offset 0x2C640, with the public name dispatch_io_create resolving through Apple's leading-underscore rename. The associated trio dispatch_io_create / dispatch_io_create_f / dispatch_io_create_with_path / dispatch_io_create_with_path_f / dispatch_io_create_with_io (OSS src/io.c L355, L406, L421, L527) is co-resident in the same translation unit and is part of the high-level I/O channel API introduced alongside libdispatch 200-series.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "io.c: public dispatch_io_create entry (read/write/path trio)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/io.c#L355"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "io.h: DISPATCH_EXPORT dispatch_io_create / dispatch_io_create_with_path prototypes",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/io.h#L155"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_io_create($|_f$|_with_path$|_with_io$)|dispatch_io_create($|_f$|_with_path$|_with_io$)'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_io_create; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_io"
+}

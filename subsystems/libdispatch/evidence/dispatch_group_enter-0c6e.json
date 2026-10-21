@@ -1,0 +1,37 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_group_enter",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_group_enter is defined at arm64e offset 0x00005F3D and _dispatch_group_leave at 0x00005C4B; both public names (dispatch_group_enter and dispatch_group_leave) resolve through Apple's leading-underscore rename.",
+    "raw_output_excerpt": "0x00005F3D T _dispatch_group_enter\n0x00005C4B T _dispatch_group_leave"
+  },
+  "claim": "dispatch_group_enter and dispatch_group_leave are both exported by libdispatch (macOS 27 / arm64e) as _dispatch_group_enter (offset 0x5F3D) and _dispatch_group_leave (offset 0x5C4B), resolving via underscore rename. Together with dispatch_group_create they implement the named-counting group primitive; the OSS pair lives in src/semaphore.c adjacent to dispatch_semaphore_signal/wait because all four share the same object layout.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "semaphore.c: dispatch_group_enter entry",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/semaphore.c#L309"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "semaphore.c: dispatch_group_leave entry",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/semaphore.c#L275"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "group.h: DISPATCH_EXPORT dispatch_group_enter / _leave prototypes",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/group.h#L80"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_group_(enter|leave)$|dispatch_group_(enter|leave)$'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_group_enter; (void)&dispatch_group_leave; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_group"
+}

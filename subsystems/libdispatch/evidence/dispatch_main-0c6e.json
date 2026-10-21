@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_main",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_main is defined in __TEXT,__text at arm64e offset 0x000120D0; the related anchor __dispatch_main_q (Apple-private double-underscore renaming) is defined at arm64e offset 0x0006FE40 and is referenced from __dispatch_main_queue_callback_4CF. There is no exported single-underscore _dispatch_main_q in the shipped arm64e binary; OSS defines it as _dispatch_main_q in src/init.c:259.",
+    "raw_output_excerpt": "0x000120D0 T _dispatch_main\n0x0006FE40 D __dispatch_main_q"
+  },
+  "claim": "dispatch_main is exported by libdispatch (macOS 27 / arm64e) as _dispatch_main at offset 0x120D0. The application's main queue is the static struct __dispatch_main_q (Apple-private double-underscore naming, arm64e offset 0x6FE40 in __DATA), which is the renamed form of the OSS-public symbol _dispatch_main_q (OSS src/init.c L259). The single-underscore _dispatch_main_q form is therefore APPLE-PRIVATE in the shipped binary -- a delta vs OSS that any external linkage to the main queue struct must route through the public dispatch_main() entry instead of relying on the OSS symbol spelling.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "queue.c: public dispatch_main(void) entry",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/queue.c#L8422"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "init.c: static _dispatch_main_q declaration (OSS single-underscore)",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/init.c#L259"
+    }
+  ],
+  "confidence": 0.85,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_main$|dispatch_main$|__?_dispatch_main_q$'\n# expect _dispatch_main present, __dispatch_main_q present (Apple-private), no bare _dispatch_main_q"
+}

@@ -1,0 +1,32 @@
+{
+  "subsystem": "libdispatch",
+  "subject": "dispatch_semaphore_create",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/usr/lib/system/introspection/libdispatch.dylib",
+    "sha256": "0c6e2167fc596046a5c927ee72ed6fead1097ea5c952de0ad8f947f9a05d3286",
+    "format": "dylib"
+  },
+  "observation": {
+    "tool": "nm",
+    "tool_invocation": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib",
+    "summary": "_dispatch_semaphore_create is defined in __TEXT,__text at arm64e offset 0x00005A33; the public C name dispatch_semaphore_create resolves via underscore rename.",
+    "raw_output_excerpt": "0x00005A33 T _dispatch_semaphore_create"
+  },
+  "claim": "dispatch_semaphore_create is exported by libdispatch (macOS 27 / arm64e) as _dispatch_semaphore_create at offset 0x5A33, with the public name dispatch_semaphore_create resolving through Apple's leading-underscore rename when a C source file references the SDK prototype.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "semaphore.c: public dispatch_semaphore_create entry",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/src/semaphore.c#L30"
+    },
+    {
+      "upstream": "opensource-apple/libdispatch",
+      "label": "semaphore.h: DISPATCH_EXPORT dispatch_semaphore_create prototype",
+      "url": "https://github.com/apple-oss-distributions/libdispatch/blob/2361ffb78a76f7ee488cd052eb0bc5c767118bf9/dispatch/semaphore.h#L65"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E '_dispatch_semaphore_create$|dispatch_semaphore_create$'\ncat > /tmp/t.c <<'EOF'\n#include <dispatch/dispatch.h>\nint main(void){ (void)&dispatch_semaphore_create; return 0; }\nEOF\nclang /tmp/t.c -o /tmp/t && nm -u /tmp/t | grep dispatch_semaphore_create"
+}
