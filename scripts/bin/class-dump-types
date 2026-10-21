@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# scripts/bin/class-dump-types
+#
+# Wrapper around `class-dump`. Emits JSON conforming to scripts/bin/output-schema.json.
+#
+# Notes:
+#   - On macOS Sonoma+ Homebrew no longer carries a `class-dump` formula. Install
+#     manually from <https://github.com/nicnocquee/class-dump> if you need Obj-C
+#     class metadata. The harness intentionally treats a missing binary as
+#     status=tool-not-installed (NOT tool-failed) so agents fall back to nm/otool.
+#   - On frameworks we recommend `--arch arm64` to avoid noisy interposing shims.
+set -eu
+cd "$(dirname "$0")"
+# shellcheck source=../lib/common.sh
+source "../lib/common.sh"
+
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    cat <<EOF
+class-dump-types — emit Objective-C class metadata from a binary as JSON.
+
+Usage:
+  scripts/bin/class-dump-types [--arch=arm64] <path-to-macho-or-framework>
+
+Outputs scripts/bin/output-schema.json envelope with observations:
+  classes   [ {name, superclass, ivars, methods} ]  (when tool present)
+  tool      "class-dump"
+
+Failure modes (no panic):
+  status=tool-not-installed  — class-dump missing on PATH
+  status=tool-failed         — class-dump exit != 0
+
+Examples:
+  scripts/bin/class-dump-types /System/Library/Frameworks/Foundation.framework/Foundation | jq .
+  scripts/bin/class-dump-types /usr/lib/system/libxpc.dylib | jq .
+EOF
+    exit 0
+  fi
+done
+
+parse_tool_args "$@"
+
+if ! assert_binary_present "$BINARY"; then
+  emit_tool_failed "class-dump" "${BINARY:-}" "binary not found: ${BINARY:-<unspecified>}"
+  exit 1
+fi
+
+if ! command -v class-dump >/dev/null 2>&1; then
+  emit_tool_missing "class-dump" "$BINARY" \
+    "install from https://github.com/nicnocquee/class-dump (Homebrew no longer ships it on Sonoma+)"
+  exit 0
+fi
+
+arch=""
+for arg in "$@"; do
+  case "$arg" in
+    --arch=*) arch="${arg#--arch=}" ;;
+  esac
+done
+
+start_ms="$(_now_ms)"
+arch_flag=()
+if [[ -n "$arch" ]]; then arch_flag=(--arch "$arch"); fi
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+class-dump "${arch_flag[@]}" "$BINARY" >"$tmp" 2>/dev/null \
+  || { emit_tool_failed "class-dump" "$BINARY" "class-dump exited non-zero"; exit 0; }
+
+# class-dump output begins with @interface NAME : SUPER ... @end blocks.
+# We emit each block as {name, superclass, body}. ivar/method lists are
+# downstream extraction jobs.
+classes_json=$(awk '
+  /^@interface/ {
+    in_iface=1
+    line=$0
+    sub(/@interface /,"",line)
+    name=line; sub(/ .*/,"",name)
+    rest=line; sub(/^[^ ]+ */,"",rest)
+    superclass=rest; sub(/ .*/,"",superclass)
+    body=""
+    next
+  }
+  /^@end/ {
+    if (in_iface) {
+      printf "CLASS\t%s\t%s\t%s\n", name, superclass, body
+      in_iface=0
+    }
+    next
+  }
+  in_iface { body = body "\n" $0 }
+' "$tmp" \
+  | jq -Rn '
+      [inputs | select(startswith("CLASS")) | split("\t") | .[1] as $n | .[2] as $s | .[3] as $b
+       | {name: $n, superclass: $s, body: $b}]
+    ' \
+  || echo '[]')
+
+total=$(printf '%s\n' "$classes_json" | jq 'length')
+
+observations=$(jq -n \
+  --argjson classes "$classes_json" \
+  --argjson total "$total" \
+  '{classes: $classes, total: $total}')
+
+end_ms="$(_now_ms)"
+duration=$(( end_ms - start_ms ))
+
+jq -n \
+  --arg binary "$BINARY" \
+  --argjson observations "$observations" \
+  --argjson duration "$duration" \
+  '{tool: "class-dump", binary: $binary, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'

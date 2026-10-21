@@ -1,0 +1,51 @@
+name: revOS harness CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-shell:
+    name: shellcheck scripts/bin
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: brew install --quiet shellcheck
+
+      - name: Run shellcheck
+        # SC1091 — sourced files (common.sh) are read at runtime only; OK.
+        # SC2154 — quoting-tolerant local variables in helpers; OK.
+        # SC2086 — word splitting is intentional in a few $@ expansions; OK.
+        # We scan scripts/bin/ AND scripts/lib/.
+        run: |
+          set -euo pipefail
+          shellcheck --severity=warning \
+            --exclude=SC1091,SC2154,SC2086 \
+            scripts/bin/*.sh scripts/lib/*.sh 2>/dev/null \
+            || shellcheck --severity=warning \
+                 --exclude=SC1091,SC2154,SC2086 \
+                 scripts/bin/* scripts/lib/*
+
+  validate-evidence:
+    name: validate evidence/*.json against schema
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run validator
+        run: |
+          python3 scripts/lib/validate_evidence.py .

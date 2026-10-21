@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cosmic-hydra/revOS/main/scripts/bin/output-schema.json",
+  "title": "revOS scripts/bin/* Wrapper Output",
+  "description": "Shape every wrapper under scripts/bin/ must emit when it succeeds (or reports tool-not-installed / tool-failed).",
+  "type": "object",
+  "required": ["tool", "binary", "status"],
+  "additionalProperties": true,
+  "properties": {
+    "tool": {
+      "type": "string",
+      "enum": ["otool", "nm", "strings", "class-dump", "rea"]
+    },
+    "binary": {
+      "type": "string",
+      "description": "The path the wrapper was asked to inspect (or null when no argument was supplied)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "tool-not-installed", "tool-failed", "invocation-error", "rea-cli's-subcommand-not-found"]
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "duration_ms": {
+      "type": "number"
+    },
+    "observations": {
+      "type": "object",
+      "description": "Tool-specific structured output. See individual wrapper docs for fields.",
+      "additionalProperties": true
+    },
+    "error": {
+      "type": "string",
+      "description": "When status != ok, a one-line human-readable explanation."
+    }
+  }
+}

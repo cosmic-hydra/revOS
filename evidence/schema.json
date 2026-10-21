@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cosmic-hydra/revOS/main/evidence/schema.json",
+  "title": "revOS Evidence Record",
+  "description": "Canonical evidence record for every claim a sprint-1 subsystem agent makes about a macOS Foundation/CoreFoundation/libdispatch symbol, type, function, constant, or behavior. Conform by running scripts/lib/validate_evidence.py over subsystems/**/evidence/*.json.",
+  "type": "object",
+  "required": [
+    "subsystem",
+    "subject",
+    "subject_kind",
+    "source_artifact",
+    "observation",
+    "claim",
+    "claim_status",
+    "cross_reference",
+    "confidence",
+    "reproducer"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "subsystem": {
+      "description": "Which subsystem agent owns this evidence record.",
+      "enum": [
+        "cf-types",
+        "cf-runtime",
+        "libdispatch",
+        "foundation-bridge",
+        "_meta"
+      ]
+    },
+    "subject": {
+      "description": "The symbol, API, struct, constant, or behavior being claimed about. Use the exact observed spelling (e.g. 'CFRunLoopRunInMode', 'CFTypeID', 'dispatch_async_f').",
+      "type": "string",
+      "minLength": 1
+    },
+    "subject_kind": {
+      "enum": ["symbol", "type", "function", "constant", "behavior"]
+    },
+    "source_artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "format"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Path to the artifact the observation was made against. May be repo-relative or absolute. For downloaded artifacts use the cache path under /Users/vaithianathan/revOS-work/cache/.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Lowercase hex SHA-256 of the artifact file contents at observation time. Use `shasum -a 256 <path>` (macOS) or `sha256sum`.",
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "format": {
+          "enum": ["macho", "dylib", "framework", "bundle", "archive", "source", "other"]
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": ["tool", "tool_invocation", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "enum": ["otool", "nm", "strings", "class-dump", "dsymutil", "dtrace", "rea", "other"]
+        },
+        "tool_invocation": {
+          "description": "The exact CLI invocation used. Include all flags. Use the scripts/bin/* wrappers when possible; record the verbatim shell command for reproducibility. Example: 'scripts/bin/nm-symbols /usr/lib/system/libxpc.dylib'",
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "description": "Human-readable description of what the tool observed. One or two sentences.",
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_output_excerpt": {
+          "description": "A short (<= 1 KB) excerpt of the actual tool output that supports the claim. Do NOT include proprietary blobs.",
+          "type": "string"
+        }
+      }
+    },
+    "claim": {
+      "description": "One sentence statement of what we believe, in present tense. Must be falsifiable.",
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_status": {
+      "enum": ["observed", "deduced", "unknown"],
+      "description": "observed = directly emitted by source_artifact. deduced = reasoned from observed evidence and a comparison to an open-source mirror. unknown = not yet established; mark explicitly to prevent fabrication."
+    },
+    "cross_reference": {
+      "type": "array",
+      "description": "References to the open-source mirrors we will diff against. Use upstream values from the enum; add URL and a short human-readable label.",
+      "items": {
+        "type": "object",
+        "required": ["upstream", "label", "url"],
+        "additionalProperties": false,
+        "properties": {
+          "upstream": {
+            "enum": [
+              "opensource-apple/cf",
+              "opensource-apple/libdispatch",
+              "opensource-apple/foundation",
+              "opensource-apple/objc4",
+              "swift-corelibs-foundation",
+              "swift-corelibs-xctest",
+              "swift-corelibs-dispatch",
+              "other"
+            ]
+          },
+          "label": { "type": "string", "minLength": 1 },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0..1 numeric confidence. observed symbols from otool/nm start at 0.9; deduced behaviors start at 0.5; unknown starts at 0.0."
+    },
+    "reproducer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Shell command(s), one per line, that re-derive this evidence from source_artifact. Prefer scripts/bin/* wrappers so re-runs are deterministic."
+    }
+  }
+}

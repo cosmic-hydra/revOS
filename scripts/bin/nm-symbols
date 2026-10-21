@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# scripts/bin/nm-symbols
+#
+# Wrapper around `nm -gU`. Emits JSON conforming to scripts/bin/output-schema.json.
+#
+# Usage: nm-symbols [--help] [--filter=REGEX] <binary-path>
+#
+#   symbols    — list of {name, kind, address, section}
+#   total      — integer count of symbols returned
+#
+# Notes:
+#   - `-gU` = global, defined symbols (small, fast, adequate for ABI work).
+#     Use direct `nm -a` if you really need local/static symbols.
+#   - `--filter` accepts a POSIX extended regex; default is no filter.
+set -eu
+cd "$(dirname "$0")"
+# shellcheck source=../lib/common.sh
+source "../lib/common.sh"
+
+# Pre-parse so --help works regardless of remaining args.
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    cat <<EOF
+nm-symbols — emit global symbol metadata for a binary as JSON.
+
+Usage:
+  scripts/bin/nm-symbols [--filter=POSIX-REGEX] <path-to-macho>
+
+Outputs scripts/bin/output-schema.json envelope with observations:
+  symbols  [ {name, kind, address, section} ]
+  total    integer count
+
+Examples:
+  scripts/bin/nm-symbols --filter='^CF' /usr/lib/system/libxpc.dylib | jq .
+  scripts/bin/nm-symbols /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | jq .
+
+Exit codes: 0 ok, 1 tool-failed, 2 invocation-error
+EOF
+    exit 0
+  fi
+done
+
+parse_tool_args "$@"
+
+if ! assert_binary_present "$BINARY"; then
+  emit_tool_failed "nm" "${BINARY:-}" "binary not found: ${BINARY:-<unspecified>}"
+  exit 1
+fi
+
+if ! command -v nm >/dev/null 2>&1; then
+  emit_tool_missing "nm" "$BINARY" "xcode-select --install (ships /usr/bin/nm)"
+  exit 0
+fi
+
+# Extract filter (if any)
+filter=""
+filtered=()
+i=0
+for arg in "$@"; do
+  if [[ "$arg" == --filter=* ]]; then filter="${arg#--filter=}"; fi
+  filtered[$i]="$arg"
+  i=$((i+1))
+done
+
+start_ms="$(_now_ms)"
+raw=$(nm -gU "$BINARY" 2>/dev/null) || { emit_tool_failed "nm" "$BINARY" "nm -gU failed for $BINARY"; exit 0; }
+
+# Filter raw to only "addr kind name" lines (skip arch headers and section banners).
+filtered=$(printf '%s\n' "$raw" | awk '
+  NF >= 3 && $2 ~ /^[A-Za-z]$/ && $1 ~ /^[0-9a-fA-F]+$/ { print $1, $2, $3 }
+')
+if [[ -n "$filter" ]]; then
+  filtered=$(printf '%s\n' "$filtered" | awk -v re="$filter" '$3 ~ re { print }')
+fi
+
+# Count safely.
+if [[ -n "$filtered" ]]; then
+  total=$(printf '%s\n' "$filtered" | grep -c '' || true)
+else
+  total=0
+fi
+total=${total:-0}
+if ! [[ "$total" =~ ^[0-9]+$ ]]; then total=0; fi
+
+# Build symbols_json.
+if [[ -n "$filtered" ]]; then
+  symbols_json=$(printf '%s\n' "$filtered" \
+    | jq -Rn '[inputs | split(" ") | .[0] as $addr | .[1] as $kind | .[2] as $name
+              | {address: $addr, kind: $kind, name: $name, section: null}]')
+else
+  symbols_json="[]"
+fi
+
+observations=$(jq -n --argjson symbols "$symbols_json" --argjson total "$total" \
+  '{symbols: $symbols, total: $total}')
+
+end_ms="$(_now_ms)"
+duration=$(( end_ms - start_ms ))
+
+jq -n \
+  --arg binary "$BINARY" \
+  --argjson observations "$observations" \
+  --argjson duration "$duration" \
+  '{tool: "nm", binary: $binary, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'

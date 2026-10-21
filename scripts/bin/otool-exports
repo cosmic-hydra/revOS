@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# scripts/bin/otool-exports
+#
+# Wrapper around `otool`. Emits JSON conforming to scripts/bin/output-schema.json.
+#
+# Usage: otool-exports [--help] [--format=json] <binary-path>
+#
+# Outputs the envelope from scripts/bin/output-schema.json with observations:
+#
+#   linked    [ {path, compatibility, current_version} ]
+#             from `otool -L`
+#   exports   [ {name, address} ]
+#             from `otool -Iv` (best-effort; absent on some stripped libraries)
+#   load_cmds [ string ]                 LC_xxx names observed in `otool -l`
+#   rpath     [ string ]                 LC_RPATH paths from `otool -l`
+#
+# Failure modes:
+#   tool-failed   otool -L exit != 0 OR <binary-path> not on disk
+set -eu
+cd "$(dirname "$0")"
+# shellcheck source=../lib/common.sh
+source "../lib/common.sh"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<EOF
+otool-exports — emit otool-derived linked-lib and export metadata as JSON.
+
+Usage:
+  scripts/bin/otool-exports [--format=json|text] <path-to-macho>
+
+Outputs scripts/bin/output-schema.json envelope with observations:
+  linked    [ {path, compatibility, current_version} ]
+  exports   [ {name, address} ]
+  load_cmds [ string ]
+  rpath     [ string ]
+
+Examples:
+  scripts/bin/otool-exports /usr/lib/system/libsystem_kernel.dylib | jq .
+
+Exit codes:
+  0  success
+  1  otool failed or wrapper-side error
+EOF
+  exit 0
+fi
+
+parse_tool_args "$@"
+
+if ! assert_binary_present "$BINARY"; then
+  emit_tool_failed "otool" "${BINARY:-}" "binary not found: ${BINARY:-<unspecified>}"
+  exit 0
+fi
+
+if ! command -v otool >/dev/null 2>&1; then
+  emit_tool_missing "otool" "$BINARY" "xcode-select --install (ships /usr/bin/otool)"
+  exit 0
+fi
+
+start_ms="$(_now_ms)"
+
+tmp_linked=$(mktemp)
+tmp_exports=$(mktemp)
+tmp_load=$(mktemp)
+trap 'rm -f "$tmp_linked" "$tmp_exports" "$tmp_load"' EXIT
+
+# -L is required for the linked list; treat non-zero as a hard failure.
+if ! otool -L "$BINARY" >"$tmp_linked" 2>/dev/null; then
+  emit_tool_failed "otool" "$BINARY" "otool -L exited non-zero"
+  exit 0
+fi
+
+# -Iv may fail on stripped libraries; tolerate that.
+otool -Iv "$BINARY" >"$tmp_exports" 2>/dev/null || true
+otool -l "$BINARY" >"$tmp_load" 2>/dev/null || true
+
+# Parse -L: lines look like
+#   /path/to/lib.dylib (compatibility version X.Y.Z, current version A.B.C)
+# There is often a "<binary>:" header line first; we skip non-matching lines.
+linked_json=$(awk '
+  /^[ \t]+\/.*\(compatibility version/ {
+    line=$0
+    sub(/^[ \t]+/, "", line)
+    # Extract path: text up to first " ("
+    path = line; sub(/ \(.*$/, "", path)
+    # Extract compatibility version
+    cv = ""; ver = ""
+    rest = line
+    if (match(rest, /compatibility version [0-9]+(\.[0-9]+)*/)) {
+      cv = substr(rest, RSTART, RLENGTH); sub(/^compatibility version /, "", cv)
+    }
+    if (match(rest, /current version [0-9]+(\.[0-9]+)*/)) {
+      ver = substr(rest, RSTART, RLENGTH); sub(/^current version /, "", ver)
+    }
+    printf "%s\t%s\t%s\n", path, cv, ver
+  }
+' "$tmp_linked" \
+  | jq -Rn '
+      [inputs | select(length>0) | split("\t") | .[0] as $p | .[1] as $cv | .[2] as $v
+       | {path: $p, compatibility: $cv, current_version: $v}]
+    ')
+
+# Parse -Iv: lines like
+#   0x0000000000001234 _SomeName
+exports_json=$(awk '
+  /^[ \t]*0x[0-9a-fA-F]+[ \t]+\S/ {
+    line=$0
+    sub(/^[ \t]+/, "", line)
+    sub(/[ \t]+.*$/, "", line); addr=$1
+    sub(/^[0-9a-fA-F]+[ \t]+/, "", line)
+    printf "%s\t%s\n", $0, addr
+  }
+' "$tmp_exports" \
+  | jq -Rn '
+      [inputs | select(length>0) | split("\t") | .[0] as $name | .[1] as $addr
+       | {name: $name, address: ("0x" + $addr)}]
+    ')
+
+# Parse -l: extract `cmd LC_xxx` lines (the load command type), and
+# `path /some/path` lines that follow LC_RPATH entries.
+load_cmds_json=$(grep -E '^[[:space:]]+cmd[[:space:]]+LC_' "$tmp_load" \
+  | awk '{ print $2 }' \
+  | sort | uniq -c \
+  | awk '{ printf "%s\t%d\n", $2, $1 }' \
+  | jq -Rn '
+      [inputs | select(length>0) | split("\t") | .[0] as $tag | .[1] as $cnt | {($tag): ($cnt|tonumber)}]
+      | add // {}')
+
+rpath_json=$(awk '
+  /^Load command/ { in_rpath=0 }
+  /^[[:space:]]+cmd[[:space:]]+LC_RPATH/ { in_rpath=1; next }
+  in_rpath && /^[[:space:]]+path[[:space:]]+\// { print $2; in_rpath=0 }
+' "$tmp_load" \
+  | sort -u \
+  | jq -Rn '[inputs | select(length>0)]')
+
+end_ms="$(_now_ms)"
+duration=$(( end_ms - start_ms ))
+
+observations=$(jq -n \
+  --argjson linked "$linked_json" \
+  --argjson exports "$exports_json" \
+  --argjson load_cmds "$load_cmds_json" \
+  --argjson rpath "$rpath_json" \
+  '{linked: $linked, exports: $exports, load_cmds: $load_cmds, rpath: $rpath}')
+
+jq -n \
+  --arg binary "$BINARY" \
+  --argjson observations "$observations" \
+  --argjson duration "$duration" \
+  '{tool: "otool", binary: $binary, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'

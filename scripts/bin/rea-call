@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# scripts/bin/rea-call
+#
+# Thin wrapper around the REA CLI (`npx -y rea-agents@6.4.0 ...`).
+#
+# Why a wrapper instead of `rea mcp <subcmd>`?
+#   The brief suggested `npx -y rea-agents@6.4.0 mcp <subcmd> --json`, but
+#   `rea mcp` only exposes two subcommands (`add`, `doctor`). REA's other 170
+#   tools (`analyze`, `inspect`, `decompile`, ...) live at the top level of
+#   `rea`, not under `rea mcp`. This wrapper accepts the *full* REA argument
+#   vector and passes it through, defaulting `--format json` when the caller
+#   does not specify one.
+#
+# Usage:
+#   scripts/bin/rea-call [--help] [--dry-run] [rea-args...]
+#   scripts/bin/rea-call mcp doctor --json          # equivalent to brief suggestion
+#   scripts/bin/rea-call analyze /path/to/App.app
+#   scripts/bin/rea-call inspect /path/to/App.app --format toon
+#
+# Outputs scripts/bin/output-schema.json envelope with observations:
+#   user_argv        array of argv passed by the user (no wrapper-added flags)
+#   resolved_argv    array of argv REA actually received
+#   rea_doc_ok       boolean — true iff `rea mcp doctor --json` returns healthy=true
+#   stdout_excerpt   first 4 KiB of REA stdout (base64)
+#   stderr_excerpt   first 4 KiB of REA stderr (base64)
+#
+# On unknown REA subcommand the wrapper emits status="rea-cli-subcommand-not-found"
+# so the evidence record can classify it as claim_status=unknown.
+set -eu
+cd "$(dirname "$0")"
+# shellcheck source=../lib/common.sh
+source "../lib/common.sh"
+
+dry_run=0
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    cat <<EOF
+rea-call — pass-through wrapper around the REA CLI.
+
+Usage:
+  scripts/bin/rea-call [--dry-run] [rea-args...]
+
+  --dry-run   print the resolved argv without invoking REA
+
+Examples:
+  scripts/bin/rea-call mcp doctor --json
+  scripts/bin/rea-call analyze /Applications/Safari.app
+  scripts/bin/rea-call inspect /usr/lib/system/libxpc.dylib --format toon
+
+The wrapper defaults to --format json when the caller does not specify one.
+EOF
+    exit 0
+  fi
+  if [[ "$arg" == "--dry-run" ]]; then dry_run=1; fi
+done
+
+if ! command -v npx >/dev/null 2>&1; then
+  emit_tool_missing "rea" "" "install Node.js to obtain npx"
+  exit 0
+fi
+
+start_ms="$(_now_ms)"
+
+# Snapshot the user's argv before any wrapper-side mutation.
+user_argv_json=$(printf '%s\n' "$@" | jq -Rn '[inputs | select(length>0)]')
+
+# Default --format json unless caller passed one.
+has_format=0
+for arg in "$@"; do
+  case "$arg" in
+    --format=*|--format|--toon|--yaml|--md|--jsonl|--full-output) has_format=1 ;;
+  esac
+done
+if [[ $has_format -eq 0 && "$*" != *"--json"* ]]; then
+  set -- "$@" --format json
+fi
+
+resolved_argv_json=$(printf '%s\n' "$@" | jq -Rn '[inputs | select(length>0)]')
+
+if [[ $dry_run -eq 1 ]]; then
+  observations=$(jq -n --argjson user "$user_argv_json" --argjson resolved "$resolved_argv_json" \
+    '{user_argv: $user, resolved_argv: $resolved, dry_run: true}')
+  end_ms="$(_now_ms)"; duration=$(( end_ms - start_ms ))
+  jq -n --argjson observations "$observations" --argjson duration "$duration" \
+    '{tool: "rea", binary: null, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'
+  exit 0
+fi
+
+tmp_out=$(mktemp)
+tmp_err=$(mktemp)
+trap 'rm -f "$tmp_out" "$tmp_err"' EXIT
+
+# Canonical entry: npx -y rea-agents@6.4.0 <user-args ...> --format json
+if ! npx -y rea-agents@6.4.0 "$@" >"$tmp_out" 2>"$tmp_err"; then
+  rc=$?
+  end_ms="$(_now_ms)"; duration=$(( end_ms - start_ms ))
+  if grep -qiE 'unknown (command|subcommand)|invalid choice|not a command (for|in)' "$tmp_err" "$tmp_out"; then
+    jq -n \
+      --arg binary "" \
+      --argjson duration "$duration" \
+      --argjson user "$user_argv_json" \
+      --argjson resolved "$resolved_argv_json" \
+      --rawfile stderr "$tmp_err" \
+      --rawfile stdout "$tmp_out" \
+      '{tool: "rea", binary: $binary, status: "rea-cli-subcommand-not-found", exit_code: 1, duration_ms: $duration,
+        error: ("REA CLI rejected this subcommand: " + ($stderr + $stdout)),
+        observations: {user_argv: $user, resolved_argv: $resolved,
+          stderr_excerpt: ($stderr | @base64), stdout_excerpt: ($stdout | @base64)}
+      }'
+    exit 0
+  fi
+  jq -n \
+    --arg binary "" \
+    --argjson duration "$duration" \
+    --argjson user "$user_argv_json" \
+    --argjson resolved "$resolved_argv_json" \
+    --rawfile stdout "$tmp_out" --rawfile stderr "$tmp_err" \
+    '{tool: "rea", binary: $binary, status: "tool-failed", exit_code: 1, duration_ms: $duration,
+      error: "non-zero exit from REA",
+      observations: {user_argv: $user, resolved_argv: $resolved, stdout_excerpt: ($stdout | @base64), stderr_excerpt: ($stderr | @base64)}
+    }'
+  exit 0
+fi
+
+# Cheap self-test probe for rea_doc_ok (always one extra npx invocation).
+doctor_json=$(npx -y rea-agents@6.4.0 mcp doctor --json 2>/dev/null || true)
+rea_doc_raw=$(printf '%s' "$doctor_json" | jq -r '.healthy // empty' 2>/dev/null || true)
+
+observations=$(jq -n \
+  --argjson user "$user_argv_json" \
+  --argjson resolved "$resolved_argv_json" \
+  --arg rea_doc_raw "$rea_doc_raw" \
+  --rawfile stdout "$tmp_out" \
+  --rawfile stderr "$tmp_err" \
+  '{
+     user_argv: $user,
+     resolved_argv: $resolved,
+     rea_doc_ok: ($rea_doc_raw == "true"),
+     stdout_excerpt: ($stdout | @base64),
+     stderr_excerpt: ($stderr | @base64)
+   }')
+
+end_ms="$(_now_ms)"
+duration=$(( end_ms - start_ms ))
+
+jq -n \
+  --arg binary "" \
+  --argjson observations "$observations" \
+  --argjson duration "$duration" \
+  '{tool: "rea", binary: $binary, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'

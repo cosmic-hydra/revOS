@@ -1,0 +1,32 @@
+# revOS.gitignore — sprint-1 harness.
+
+# Local caches.
+.cache/
+cache/
+
+# Generated raw evidence (full tool output dumps). JSON evidence records
+# themselves are tracked under subsystems/*/evidence/*.json.
+subsystems/*/evidence/raw/
+
+# Mach-O / DWARF / dSYM artefacts. We never commit binary blobs.
+*.dwarf
+*.dSYM
+*.dSYM/
+*.macho
+*.ipsw
+*.bin
+
+# Node / npm artefacts (REA wrapper uses npx at runtime; not vendored).
+node_modules/
+
+# OS noise.
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# Editor / runtime scratch.
+.idea/
+.vscode/
+.mavis/
+*.log

@@ -1,0 +1,32 @@
+{
+  "subsystem": "_meta",
+  "subject": "rea-mcp-doctor-health-probe",
+  "subject_kind": "behavior",
+  "source_artifact": {
+    "path": "subsystems/_meta/evidence/raw/rea-doctor.json",
+    "sha256": "a031b726d4746cdbe30e865bece3857607f1b02fb30bf0b9abd8ad27f5782cbb",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "rea",
+    "tool_invocation": "npx -y rea-agents@6.4.0 mcp doctor --json",
+    "summary": "REA MCP server reports healthy=true at package version 6.4.0 (catalog digest 85d80276ecacf937bf3e803b7a31748ae1a8286f556fa5cf734eef768cc7d72a), 170/170 expected tools observed, 6/6 expected prompts observed, request_flow.binary_session ok=true. All five checks (initialize, inventory:tools, inventory:prompts, server-identity, request-flow) returned ok=true. stderr empty.",
+    "raw_output_excerpt": "{\n  \"healthy\": true,\n  \"adapter\": \"production-stdio\",\n  \"server\": {\n    \"name\": \"rea\",\n    \"version\": \"6.4.0\",\n    \"protocol_version\": \"2025-11-25\"\n  },\n  \"inventory\": {\n    \"tools\": {\n      \"expected\": 170,\n      \"observed\": 170,\n      \"missing\": [],\n      \"unexpected\": [],\n      \"duplicates\": []\n    },\n    \"prompts\": {\n      \"expected\": 6,\n      \"observed\": 6,\n      \"missing\": [],\n      \"unexpected\": [],\n      \"duplicates\": []\n    }\n  },\n  \"identity\": {\n    \"expected_package_version\": \"6.4.0\",\n    \"observed_package_version\": \"6.4.0\",\n    \"expected_catalog_digest\": \"85d80276ecacf937bf3e803b7a31748ae1a8286f556fa5cf734eef768cc7d72a\",\n    \"observed_catalog_digest\": \"85d80276ecacf937bf3e803b7a31748ae1a8286f556fa5cf734eef768cc7d72a\"\n  },\n  \"request_flow\": {\n    \"tool\": \"binary_session\",\n    \"ok\": true\n  },\n  ...\n}"
+  },
+  "claim": "REA MCP server (rea-agents 6.4.0) is healthy in this runtime and reports 170/170 expected tools, but the only subcommands under `rea mcp` are `add` and `doctor`; other REA tools live at the top level of the `rea` CLI.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "other",
+      "label": "REA CLI top-level help",
+      "url": "https://www.npmjs.com/package/rea-agents/v/6.4.0"
+    },
+    {
+      "upstream": "other",
+      "label": "REA skill docs (loaded in this runtime)",
+      "url": "https://github.com/anthropics/skills/tree/main/skills/rea/reverse-engineer-anything"
+    }
+  ],
+  "confidence": 0.95,
+  "reproducer": "npx -y rea-agents@6.4.0 mcp doctor --json > /tmp/rea-doctor.json && shasum -a 256 /tmp/rea-doctor.json && jq '.healthy, .server.version, .inventory.tools.observed' /tmp/rea-doctor.json"
+}

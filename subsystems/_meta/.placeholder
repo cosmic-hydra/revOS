@@ -1,0 +1,3 @@
+The `_meta` directory is owned by the Curator agent (the harness itself). It
+holds only harness-level evidence — the REA CLI probe is the first such record.
+Subsystem agents MUST NOT write here.

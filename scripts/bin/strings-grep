@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# scripts/bin/strings-grep
+#
+# Wrapper around `strings`. Emits JSON conforming to scripts/bin/output-schema.json.
+#
+# Usage: strings-grep [--help] [--min=N] [--pattern=REGEX] <binary-path>
+#
+#   matches     — list of {offset, string} where string is base64-encoded (UTF-8 safe in JSON)
+#   pattern     — the regex used (echo of --pattern= for reproducibility)
+#   min         — minimum length passed to `strings -n`
+#   total       — count of matches
+set -eu
+cd "$(dirname "$0")"
+# shellcheck source=../lib/common.sh
+source "../lib/common.sh"
+
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    cat <<EOF
+strings-grep — emit relevant string matches from a binary as JSON.
+
+Usage:
+  scripts/bin/strings-grep [--min=N] [--pattern=REGEX] <path>
+
+Outputs scripts/bin/output-schema.json envelope with observations:
+  matches  [ {offset, string} ]   string is base64 of decoded UTF-8
+  pattern  string                 echo of --pattern for reproducibility
+  min      integer                echo of --min
+  total    integer
+
+Examples:
+  scripts/bin/strings-grep --pattern='CFRunLoop' /usr/lib/system/libxpc.dylib | jq .
+  scripts/bin/strings-grep --min=8 /usr/lib/system/libxpc.dylib | jq .
+
+Exit codes: 0 ok, 1 tool-failed, 2 invocation-error
+EOF
+    exit 0
+  fi
+done
+
+parse_tool_args "$@"
+
+if ! assert_binary_present "$BINARY"; then
+  emit_tool_failed "strings" "${BINARY:-}" "binary not found: ${BINARY:-<unspecified>}"
+  exit 1
+fi
+
+if ! command -v strings >/dev/null 2>&1; then
+  emit_tool_missing "strings" "$BINARY" "xcode-select --install (ships /usr/bin/strings)"
+  exit 0
+fi
+
+# Optional flags
+min=4
+pattern=""
+for arg in "$@"; do
+  case "$arg" in
+    --min=*) min="${arg#--min=}" ;;
+    --pattern=*) pattern="${arg#--pattern=}" ;;
+  esac
+done
+
+start_ms="$(_now_ms)"
+
+# `strings -o` writes "<decimal-offset> <string>" per line. We use -a -n -o.
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+strings -a -n "$min" -o "$BINARY" >"$tmp" 2>/dev/null || { emit_tool_failed "strings" "$BINARY" "strings -a -n $min -o failed"; exit 0; }
+
+if [[ -n "$pattern" ]]; then
+  filtered=$(grep -E "$pattern" "$tmp" || true)
+else
+  filtered=$(cat "$tmp")
+fi
+
+matches_json=$(printf '%s\n' "$filtered" \
+  | awk 'NF>=2 { sub(/^[[:space:]]+/, ""); addr=$1; rest=substr($0, length($1)+1); sub(/^[[:space:]]/, "", rest); printf "%s\t%s\n", addr, rest }' \
+  | jq -Rn '
+      [inputs | select(. != "") | split("\t") | .[0] as $offset | .[1] as $raw
+       | {offset: $offset, string: ($raw | @base64)}]
+    ')
+
+total=$(printf '%s\n' "$filtered" | grep -cE '[[:space:]]*[0-9]+[[:space:]]+' || true)
+
+observations=$(jq -n \
+  --argjson matches "$matches_json" \
+  --arg pattern "$pattern" \
+  --argjson min "$min" \
+  --argjson total "$total" \
+  '{matches: $matches, pattern: $pattern, min: $min, total: $total}')
+
+end_ms="$(_now_ms)"
+duration=$(( end_ms - start_ms ))
+
+jq -n \
+  --arg binary "$BINARY" \
+  --argjson observations "$observations" \
+  --argjson duration "$duration" \
+  '{tool: "strings", binary: $binary, status: "ok", exit_code: 0, duration_ms: $duration, observations: $observations}'
