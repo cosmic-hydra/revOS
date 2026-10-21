@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFDataGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-data.txt",
+    "sha256": "39bf25cfd69bfa5407e02d0566ccd132ab7b34d91985424ade7916e0ed9405bb",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFData(GetTypeID|Create|GetLength|GetBytePtr)$'",
+    "summary": "CFDataGetTypeID and its core CFData entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFData handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x00037E44  _CFDataCreate\n        0x0001BB60  _CFDataGetBytePtr\n        0x0001B99C  _CFDataGetLength\n        0x000431CC  _CFDataGetTypeID"
+  },
+  "claim": "CFDataGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFData as a linkable boxed-type ABI alongside the other CFData accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFData.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFData.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFData(GetTypeID|Create|GetLength|GetBytePtr)$'"
+}

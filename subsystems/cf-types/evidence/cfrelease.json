@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFRelease",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-runtime-root.txt",
+    "sha256": "2124e15a883258a2886ddb7a84b134555b7f82498ac132da05c1411aed0a9f4b",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CF(GetTypeID|Equal|Hash|Retain|Release|GetRetainCount|CopyDescription|GetAllocator)$'",
+    "summary": "CFRelease appears in the exported-symbol trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692. The framework ships as a stub bundle on macOS 27 (no on-disk Mach-O), so the trie was read through dyld_info rather than otool/nm. On this image is the polymorphic release entry point.",
+    "raw_output_excerpt": "        0x0003D160  _CFCopyDescription\n        0x00008564  _CFEqual\n        0x00006AA4  _CFGetAllocator\n        0x000A3FB4  _CFGetRetainCount\n        0x00020CAC  _CFGetTypeID\n        0x00007CD4  _CFHash\n        0x0000A258  _CFRelease\n        0x0000400C  _CFRetain"
+  },
+  "claim": "CFRelease is an exported symbol of the macOS 27 arm64e CoreFoundation image at the offset shown in the excerpt, so it is part of the linkable ABI surface.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFBase.c (public API declarations)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFBase.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CF(GetTypeID|Equal|Hash|Retain|Release|GetRetainCount|CopyDescription|GetAllocator)$'"
+}

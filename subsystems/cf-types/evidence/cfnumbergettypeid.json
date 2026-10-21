@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFNumberGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-number.txt",
+    "sha256": "dd9576206ceea3cc018e9a93f7a5b485d15331831c1ba83a66b8315472067050",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFNumber(GetTypeID|Create|GetValue)$'",
+    "summary": "CFNumberGetTypeID and its core CFNumber entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFNumber handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x000092A4  _CFNumberCreate\n        0x0000236C  _CFNumberGetTypeID\n        0x0001C6E4  _CFNumberGetValue"
+  },
+  "claim": "CFNumberGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFNumber as a linkable boxed-type ABI alongside the other CFNumber accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFNumber.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFNumber.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFNumber(GetTypeID|Create|GetValue)$'"
+}

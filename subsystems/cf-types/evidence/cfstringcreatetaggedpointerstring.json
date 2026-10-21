@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "__CFStringCreateTaggedPointerString",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-string-tagged.txt",
+    "sha256": "5920e1ec59eb8c0e0f65f64c77b4d1bca89adfaddc016d52f76b3d8565a64282",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E 'TaggedPointer'",
+    "summary": "The macOS 27 arm64e CoreFoundation export trie contains exactly three CF tagged-pointer string entry points: __CFStringCreateTaggedPointerString, __CFStringCreateIndirectASCIITaggedPointerString and __CFIndirectTaggedPointerStringGetContents. The CF-Lite mirror at revision dc54c6b contains none of these names, so this machinery postdates that snapshot.",
+    "raw_output_excerpt": "        0x65A4C6C0  _OBJC_CLASS_$_NSIndirectTaggedPointerString\n        0x65A4D688  _OBJC_CLASS_$_NSTaggedPointerString\n        0x65A4C648  _OBJC_METACLASS_$_NSIndirectTaggedPointerString\n        0x65A4CB20  _OBJC_METACLASS_$_NSTaggedPointerString\n        0x0016B6BC  __CFIndirectTaggedPointerStringGetContents\n        0x0016B4A0  __CFStringCreateIndirectASCIITaggedPointerString\n        0x0016E624  __CFStringCreateTaggedPointerString\n        0x0003CB98  __NSTaggedPointerStringGetBytes"
+  },
+  "claim": "macOS 27 CoreFoundation exports __CFStringCreateTaggedPointerString and two sibling tagged-pointer string helpers, confirming an arm64 tagged-pointer fast path that is absent from the CF-Lite 1153.18 mirror; the tag bit layout itself is not observable from the export table.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFString.c (no tagged-pointer code at this revision)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFString.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E 'TaggedPointer'"
+}

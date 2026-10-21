@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFSetGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-set.txt",
+    "sha256": "a62e1496bf9d153ef4e74bb82bf9a03e68b2c3152aed30dd05abfe0439c06bec",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFSet(GetTypeID|Create|GetCount|AddValue|ContainsValue)$'",
+    "summary": "CFSetGetTypeID and its core CFSet entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFSet handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x0003FE14  _CFSetAddValue\n        0x000411E0  _CFSetContainsValue\n        0x00070FA4  _CFSetCreate\n        0x00051FB8  _CFSetGetCount\n        0x0004BED8  _CFSetGetTypeID"
+  },
+  "claim": "CFSetGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFSet as a linkable boxed-type ABI alongside the other CFSet accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFSet.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFSet.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFSet(GetTypeID|Create|GetCount|AddValue|ContainsValue)$'"
+}

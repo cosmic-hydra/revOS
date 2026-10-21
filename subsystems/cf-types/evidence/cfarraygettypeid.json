@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFArrayGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-array.txt",
+    "sha256": "b4bba2005699f3054fd5268274aea1f91c6c8865eca5ef9e984ea03fad737b6d",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFArray(GetTypeID|Create|GetCount|GetValueAtIndex|BSearchValues)$'",
+    "summary": "CFArrayGetTypeID and its core CFArray entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFArray handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x000E2A90  _CFArrayBSearchValues\n        0x00003904  _CFArrayCreate\n        0x0001E92C  _CFArrayGetCount\n        0x0003B308  _CFArrayGetTypeID\n        0x000203C0  _CFArrayGetValueAtIndex"
+  },
+  "claim": "CFArrayGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFArray as a linkable boxed-type ABI alongside the other CFArray accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFArray.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFArray.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFArray(GetTypeID|Create|GetCount|GetValueAtIndex|BSearchValues)$'"
+}

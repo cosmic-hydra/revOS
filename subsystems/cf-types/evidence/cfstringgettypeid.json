@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFStringGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-string-api.txt",
+    "sha256": "8a3a22a59597ed193b09701f9548bacf853384bc628ef87984a746d2ceba2e0a",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFString(GetTypeID|CreateWithCString|GetCString|GetLength|GetCharacters|Compare|Find)$'",
+    "summary": "CFStringGetTypeID and its core CFString entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFString handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x0001B548  _CFStringCompare\n        0x00002520  _CFStringCreateWithCString\n        0x00021554  _CFStringFind\n        0x000074B8  _CFStringGetCString\n        0x0000FC9C  _CFStringGetCharacters\n        0x000071DC  _CFStringGetLength\n        0x000215F0  _CFStringGetTypeID"
+  },
+  "claim": "CFStringGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFString as a linkable boxed-type ABI alongside the other CFString accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFString.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFString.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFString(GetTypeID|CreateWithCString|GetCString|GetLength|GetCharacters|Compare|Find)$'"
+}

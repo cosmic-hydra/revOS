@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFRuntimeBase",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/cf-exports-arm64e.txt",
+    "sha256": "55c58b30c63b3a31b3a150a27db1fd09cbac51269ae4918d9f9940de730dea95",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E 'CFRuntimeBase'   # returns no rows\ngrep -c 'CFRuntimeBase' /Users/vaithianathan/revOS-work/cache/cf-types/tbd-cf-symbols.txt  # returns 0",
+    "summary": "CFRuntimeBase does not appear anywhere in the macOS 27 arm64e CoreFoundation export trie (3098 symbols) nor in the SDK's CoreFoundation.tbd link stub, and it is absent from the SDK's public Headers/. The struct is declared only in the CF-Lite mirror's CFRuntime.h as __CFRuntimeBase { uintptr_t _cfisa; uint8_t _cfinfo[4]; #if __LP64__ uint32_t _rc; #endif }.",
+    "raw_output_excerpt": "export trie matches: 0\ntbd symbol matches: 0\npublic header matches: 0"
+  },
+  "claim": "CFRuntimeBase is not a public or exported CoreFoundation symbol; it is an internal runtime base struct that CF-Lite declares as uintptr_t _cfisa + uint8_t _cfinfo[4] + LP64 uint32_t _rc (16 bytes on arm64), so its layout is deduced from the mirror and cannot be confirmed against the macOS 27 binary.",
+  "claim_status": "deduced",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFRuntime.h (struct __CFRuntimeBase)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFRuntime.h"
+    }
+  ],
+  "confidence": 0.5,
+  "reproducer": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -cE 'CFRuntimeBase'\ngit -C /Users/vaithianathan/revOS-work/cache/opensource-apple-cf grep -n -A 6 'struct __CFRuntimeBase' -- CFRuntime.h"
+}

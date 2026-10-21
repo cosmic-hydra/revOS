@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFErrorGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-error.txt",
+    "sha256": "1bc33cbcbf53d34eb9e2cf108a1b1a25b9b834d4e3e92089df7721f19b99771f",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFError(GetTypeID|Create|CopyDescription|GetCode|GetDomain)$'",
+    "summary": "CFErrorGetTypeID and its core CFError entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFError handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x001141A4  _CFErrorCopyDescription\n        0x00079AA8  _CFErrorCreate\n        0x000A0438  _CFErrorGetCode\n        0x000A03DC  _CFErrorGetDomain\n        0x00002500  _CFErrorGetTypeID"
+  },
+  "claim": "CFErrorGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFError as a linkable boxed-type ABI alongside the other CFError accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFError.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFError.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFError(GetTypeID|Create|CopyDescription|GetCode|GetDomain)$'"
+}

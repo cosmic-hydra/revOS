@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFTypeID",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFBase.h",
+    "sha256": "b4cff7c99779f092e14fa6d3eea151d05c0324f106e1f103b27c5727223f023f",
+    "format": "source"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "grep -nE 'typedef.*CFTypeID' /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFBase.h",
+    "summary": "CFBase.h declares CFTypeID twice under an #if defined(__LLP64__) && __LLP64__ guard: 'unsigned long long' on LLP64 and 'unsigned long' otherwise. A clang -E probe on this arm64 Darwin host reports __LLP64__ is NOT defined, so the LP64 arm64 branch ('unsigned long', 8 bytes) is the one in effect on macOS 27 arm64.",
+    "raw_output_excerpt": "CFBase.h:556  #if defined(__LLP64__) && __LLP64__\nCFBase.h:557  typedef unsigned long long CFTypeID;\nCFBase.h:561  #else\nCFBase.h:562  typedef unsigned long CFTypeID;"
+  },
+  "claim": "On arm64 macOS 27, CFTypeID is the LP64 branch 'typedef unsigned long CFTypeID' (64-bit), because Darwin does not define __LLP64__; CFTypeID is a typedef and therefore has no Mach-O export of its own.",
+  "claim_status": "deduced",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFBase.h (CFTypeID typedef)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFBase.h"
+    }
+  ],
+  "confidence": 0.7,
+  "reproducer": "grep -nE 'typedef.*CFTypeID' /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFBase.h\nprintf '#ifdef __LLP64__\\nLLP64_YES\\n#else\\nLLP64_NO\\n#endif\\n' > /tmp/t.c && clang -E /tmp/t.c | grep LLP64_"
+}

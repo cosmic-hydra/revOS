@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFUUIDGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-uuid.txt",
+    "sha256": "57aa03550b25961c618ec0959fe4d2a889dc43c2ad2b7aa61e1e571be8db7d99",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFUUID(GetTypeID|Create|CreateString|CreateFromString|GetUUIDBytes)$'",
+    "summary": "CFUUIDGetTypeID and its core CFUUID entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFUUID handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x00091E74  _CFUUIDCreate\n        0x000CED64  _CFUUIDCreateFromString\n        0x000668DC  _CFUUIDCreateString\n        0x0006A38C  _CFUUIDGetTypeID\n        0x0007C95C  _CFUUIDGetUUIDBytes"
+  },
+  "claim": "CFUUIDGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFUUID as a linkable boxed-type ABI alongside the other CFUUID accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFUUID.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFUUID.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFUUID(GetTypeID|Create|CreateString|CreateFromString|GetUUIDBytes)$'"
+}

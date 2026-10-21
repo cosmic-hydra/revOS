@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "kCFBooleanTrue",
+  "subject_kind": "constant",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-boolean.txt",
+    "sha256": "efbbbeabbab6ee0ece78d3de0823d88df4d1a6ec3981e15272daac1e56c15071",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '(_kCFBoolean|_CFBooleanGetTypeID)'",
+    "summary": "The macOS 27 arm64e CoreFoundation export trie carries both the public boolean singletons kCFBooleanTrue/kCFBooleanFalse (data symbols) and CF-Lite-mirrored internal aliases __kCFBooleanTrue/__kCFBooleanFalse, plus CFBooleanGetTypeID.",
+    "raw_output_excerpt": "        0x0004BF14  _CFBooleanGetTypeID\n        0x6776D898  ___kCFBooleanFalse\n        0x6776D888  ___kCFBooleanTrue\n        0x5FCEB460  _kCFBooleanFalse\n        0x5FCEB458  _kCFBooleanTrue"
+  },
+  "claim": "kCFBooleanTrue and kCFBooleanFalse are exported data symbols of the macOS 27 arm64e CoreFoundation image, so CFBoolean instances are reachable through stable global pointers in addition to CFBooleanGetTypeID.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFNumber.c (kCFBooleanTrue/False singleton definitions)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFNumber.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '(_kCFBoolean|_CFBooleanGetTypeID)'"
+}

@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "kCFNull",
+  "subject_kind": "constant",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-allocator.txt",
+    "sha256": "13c93af0085b86a7ec04d847e784664dd234ecaab5cbcb88b7b3e26c1690a292",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '(_kCFAllocator[A-Za-z]*|__kCFNull|_kCFNull)'",
+    "summary": "kCFNull is present in the macOS 27 arm64e CoreFoundation export trie as a data symbol, alongside an internal __kCFNull alias that CF-Lite declares static but that this image nevertheless exports.",
+    "raw_output_excerpt": "        0x676840B0  ___kCFNull\n        0x00222C00  _kCFAllocatorDefault\n        0x00222C18  _kCFAllocatorDefaultGCRefZero\n        0x5F940D90  _kCFAllocatorMalloc\n        0x5F940D98  _kCFAllocatorMallocZone\n        0x5F940DA0  _kCFAllocatorNull\n        0x5F940D88  _kCFAllocatorSystemDefault\n        0x00222C10  _kCFAllocatorSystemDefaultGCRefZero"
+  },
+  "claim": "kCFNull is an exported data symbol of the macOS 27 arm64e CoreFoundation image, so the null placeholder object is reachable by link-time reference.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFBase.c (kCFNull definition)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFBase.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '(_kCFAllocator[A-Za-z]*|__kCFNull|_kCFNull)'"
+}

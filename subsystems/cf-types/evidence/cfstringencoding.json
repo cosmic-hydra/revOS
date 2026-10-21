@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFStringEncoding",
+  "subject_kind": "type",
+  "source_artifact": {
+    "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFString.h",
+    "sha256": "ed49de9f86adc90f53a2f6d5a10666e1e4b865a15adea1311d8104083d9fac31",
+    "format": "source"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "grep -nE 'kCFStringEncoding[A-Za-z0-9]+ *=' /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFString.h\ndyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '_kCFStringEncoding[A-Za-z0-9]*$'   # returns no rows",
+    "summary": "CFStringEncoding is a compile-time enum declared in the published CFString.h (MacRoman=0, Unicode/UTF16=0x0100, ASCII=0x0600, UTF8=0x08000100, UTF32=0x0c000100). The macOS 27 arm64e CoreFoundation export trie contains no _kCFStringEncoding* data symbol at all, so these values are link-time constants only.",
+    "raw_output_excerpt": "CFString.h:113  kCFStringEncodingUTF8 = 0x08000100,\nCFString.h:112  kCFStringEncodingUnicode = 0x0100,\nexport trie rows matching _kCFStringEncoding*: 0"
+  },
+  "claim": "CFStringEncoding values are compile-time enum constants from the published CFString.h and have no corresponding exported data symbols in the macOS 27 arm64e CoreFoundation image.",
+  "claim_status": "deduced",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFString.h (CFStringEncoding enum)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFString.h"
+    }
+  ],
+  "confidence": 0.7,
+  "reproducer": "grep -nE 'kCFStringEncoding(UTF8|Unicode|ASCII|MacRoman) *=' /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFString.h\ndyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -cE '_kCFStringEncoding[A-Za-z0-9]*$'"
+}

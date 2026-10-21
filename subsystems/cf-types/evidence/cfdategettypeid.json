@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFDateGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-date.txt",
+    "sha256": "bdfff04f4d3ab482eb5ce585c8a17ef121fde42d3abece4fd43d47b7b5c7a5ae",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CF(DateGetTypeID|DateCreate|DateGetAbsoluteTime|AbsoluteTimeGetCurrent)$'",
+    "summary": "CFDateGetTypeID and its core CFDate entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFDate handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x000444A8  _CFAbsoluteTimeGetCurrent\n        0x00037744  _CFDateCreate\n        0x0004BF1C  _CFDateGetAbsoluteTime\n        0x0004BEE0  _CFDateGetTypeID"
+  },
+  "claim": "CFDateGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFDate as a linkable boxed-type ABI alongside the other CFDate accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFDate.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFDate.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CF(DateGetTypeID|DateCreate|DateGetAbsoluteTime|AbsoluteTimeGetCurrent)$'"
+}

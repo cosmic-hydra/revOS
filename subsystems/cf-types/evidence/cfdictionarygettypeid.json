@@ -1,0 +1,27 @@
+{
+  "subsystem": "cf-types",
+  "subject": "CFDictionaryGetTypeID",
+  "subject_kind": "function",
+  "source_artifact": {
+    "path": "/Users/vaithianathan/revOS-work/cache/cf-types/caps/cf-dictionary.txt",
+    "sha256": "86015f68bb844faca65725e911ed4dc0671ae2333acf480abe71c546d3b23eab",
+    "format": "other"
+  },
+  "observation": {
+    "tool": "other",
+    "tool_invocation": "dyld_info -exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | grep -E '[[:space:]]_CFDictionary(GetTypeID|Create|GetCount|GetValue|ContainsKey)$'",
+    "summary": "CFDictionaryGetTypeID and its core CFDictionary entry points appear in the export trie of the macOS 27.0 (build 26A5388g) arm64e CoreFoundation image, UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692, which exports 3098 symbols. The sibling rows in the excerpt are the matching accessor/create calls for the same boxed family, so the CFDictionary handle ABI is linkable end to end.",
+    "raw_output_excerpt": "        0x00024650  _CFDictionaryContainsKey\n        0x00039280  _CFDictionaryCreate\n        0x000202E4  _CFDictionaryGetCount\n        0x00020CA4  _CFDictionaryGetTypeID\n        0x00006C68  _CFDictionaryGetValue"
+  },
+  "claim": "CFDictionaryGetTypeID is an exported symbol of the macOS 27 arm64e CoreFoundation image, establishing CFDictionary as a linkable boxed-type ABI alongside the other CFDictionary accessors shown in the excerpt.",
+  "claim_status": "observed",
+  "cross_reference": [
+    {
+      "upstream": "opensource-apple/cf",
+      "label": "CF-Lite CFDictionary.c (mirrored implementation)",
+      "url": "https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFDictionary.c"
+    }
+  ],
+  "confidence": 0.9,
+  "reproducer": "CF=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation\ndyld_info -uuid \"$CF\"            # expect UUID F4CE3D4A-29B8-3F98-A136-7089CEB27692\ndyld_info -exports \"$CF\" | grep -E '[[:space:]]_CFDictionary(GetTypeID|Create|GetCount|GetValue|ContainsKey)$'"
+}
