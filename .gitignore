@@ -30,3 +30,6 @@ Thumbs.db
 .vscode/
 .mavis/
 *.log
+
+# Isolated agent worktrees (superpowers:using-git-worktrees).
+.worktrees/
