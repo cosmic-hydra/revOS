@@ -1793,6 +1793,92 @@ Expected: exit 1, and violations for — the unresolvable `evidence_refs` entry,
 rm gap-ledger/gaps/_fixture-violations.json
 ```
 
+- [ ] **Step 6b: Close three coverage gaps the implementer found**
+
+The implementer reported three gaps against the spec, all confirmed by the
+controller against the shipped code. Close them here.
+
+**(a) A gap with an EMPTY `evidence_refs` is currently accepted.** The schema
+declares `evidence_refs` with `minItems: 1`, but the shared walker in
+`validate_evidence.py` does not implement `minItems`, so the schema check is
+silent and invariant 1 iterates an empty list without complaint. The result:
+`"evidence_refs": []` validates as **1 ok**. A gap that cites no evidence is
+the exact thing this artifact exists to prevent, so add an explicit check in
+`check_invariants`:
+
+```python
+    # Every gap must cite the evidence that proves it. The schema declares
+    # minItems: 1 but the shared walker does not implement minItems, so this
+    # has to be checked here or a gap with no evidence at all passes.
+    if not record.get("evidence_refs"):
+        errors.append(f"{tag}: evidence_refs must cite at least one evidence record")
+```
+
+Do NOT change `validate_evidence.py` to add `minItems` support — that file is
+out of this task's scope, and the gap-ledger invariant is the one that matters
+here.
+
+**(b) Spec §5.2 item 1 says "resolves to a real, schema-VALID evidence
+record"; the implementation only checks file existence.** A gap citing
+`evidence/schema.json` — a real file that is not an evidence record — would
+pass. Validate the referenced record against the evidence schema. The evidence
+schema loader is reusable:
+
+```python
+from validate_evidence import _walk, load_schema
+```
+
+and in the invariant:
+
+```python
+    for ref in record.get("evidence_refs", []):
+        target = root / ref
+        if not target.is_file():
+            errors.append(f"{tag}: evidence_refs entry does not resolve to a file: {ref}")
+            continue
+        try:
+            with target.open() as fh:
+                payload = json.load(fh)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{tag}: evidence_refs entry is not valid JSON: {ref} ({exc})")
+            continue
+        schema_errors = _walk(payload, evidence_schema, ref)
+        if schema_errors:
+            errors.append(f"{tag}: evidence_refs entry is not schema-valid: {ref}")
+            errors.extend(f"    {e}" for e in schema_errors)
+```
+
+where `evidence_schema = load_schema()` is resolved once. Note `load_schema()`
+in `validate_evidence.py` reads the repo's own `evidence/schema.json` by a path
+relative to that file, so it resolves correctly from either script.
+
+**(c) Spec §5.2 item 4 — "route and status are consistent with the artifact
+the route implies (a `shim` gap must not have an entry under
+`third_party/PATCHES/`)" — is not implemented at all.** `route` currently
+appears only in the index writer. Add the check, with the patch convention
+`third_party/PATCHES/<gap_id>.patch`:
+
+```python
+    # Route and artifact must agree: a shim gap is implemented in our own
+    # source tree, so it must NOT also carry an upstream patch. An
+    # in-place-patch gap must carry one.
+    route = record.get("route")
+    patch = root / "third_party" / "PATCHES" / f"{record.get('gap_id')}.patch"
+    if route == "shim" and patch.exists():
+        errors.append(f"{tag}: route='shim' but an upstream patch exists at {patch}")
+    if route == "in-place-patch" and not patch.exists():
+        errors.append(f"{tag}: route='in-place-patch' but no patch file at {patch}")
+```
+
+Create `third_party/PATCHES/.gitkeep` so the directory exists and the check has
+a stable root.
+
+**(d) Cosmetic — the failure line duplicates the filename.** The output reads
+`FAIL phantom.json: phantom.json: status=...` because `_walk` is called with
+`path.name` as its path root and the caller then prefixes `path.name` again.
+Call `_walk` with an empty root and let the caller supply the prefix, so the
+message reads `FAIL phantom.json: status=...`.
+
 - [ ] **Step 7: Verify `--write-index` generates the index**
 
 Run:
