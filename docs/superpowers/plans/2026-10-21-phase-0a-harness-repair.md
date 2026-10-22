@@ -1074,6 +1074,12 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
 - Create: `scripts/lib/audit_slice_attribution.py`
 - Modify: `subsystems/libdispatch/evidence/*.json` (correction of wrong-slice addresses — the `libdispatch` subsystem owns these files; this task is an explicitly granted ownership exception, recorded in the ledger)
 
+**Status note (2026-10-22).** Steps 1, 2, 2c, 5c and 5d — the wrapper-side
+changes — are **already implemented and committed** at `c252fee`. The implementer
+hit the provider's 300s first-event timeout while surveying the corpus, and the
+uncommitted wrapper work was preserved as that commit. A later task continues
+from here and must not redo them.
+
 **Interfaces:**
 - Consumes: `scripts/bin/dyld-info-exports` from Task 2 (whose fix round 1 bounded the export parse to a single slice); the 12 libdispatch evidence records.
 - Produces: `python3 scripts/lib/audit_slice_attribution.py [ROOT_DIR]` → exit 0 when every cited address is attributable to the slice its record claims, exit 1 with one line per violation. `scripts/bin/dyld-info-exports` with no `--arch` now selects the **host-native** slice.
@@ -1217,6 +1223,39 @@ Create `scripts/lib/audit_slice_attribution.py`. It must:
    This is a separate check from the address attribution, and it is a text
    check, not a symbol check.
 
+9. **A reproducibility replay check — the third check, and the one that catches
+   counts that were never right.**
+
+   A third defect species was found while this task was in progress. The
+   `foundation-bridge` record `foundation-shim-c-symbols-nm-cf8c8657.json`
+   claims the BridgeSupport shim exports **46** `_NS*` symbols and **126**
+   symbols in total. Measured twice — once through the wrapper, once through
+   raw `nm -gU` — the real figures are **118** and **122**. The shim's mtime is
+   2025-07-17, so it has not changed since the record was written: **the record
+   was simply wrong when written**, at `confidence: 0.95` and
+   `claim_status: observed`. Neither the slice-attribution check nor the
+   stale-narrative check would have caught it.
+
+   The check: **re-run the record's observation and compare it to the record's
+   quoted output.** For each record, take the `observation.tool_invocation`
+   and see whether the record's `raw_output_excerpt` still appears in what the
+   tool produces now. If it does not, the record is not reproducible and is
+   flagged as `MISMATCH-REPRO <file>`.
+
+   **Security constraint — this must NOT execute arbitrary shell.** The
+   `reproducer` and `tool_invocation` fields are data, and running them
+   verbatim would be a command-injection footgun. Replay only invocations
+   matching a **whitelisted set of shapes**, and skip anything else:
+
+   - `nm -arch <arch> -gU <path>` (optionally followed by a `| grep <pattern>`)
+   - `dyld_info [-arch <arch>] -exports <path>` (optionally followed by
+     `| grep <pattern>`)
+   - `scripts/bin/<one of the known wrappers> [flags] <path>` (optionally
+     followed by `| grep <pattern>` or `| jq …`)
+
+   Anything else is reported as `SKIPPED-REPRO <file>` (informational, not a
+   failure) and left alone. Only the whitelisted forms are ever executed.
+
 The tool must not modify anything. It is a detector; the correction is a separate, explicit step.
 
 - [ ] **Step 4: Run the audit and confirm it detects the known defect**
@@ -1273,6 +1312,37 @@ whose `observation.summary` describes the pre-Task-3 wrapper behaviour:
 
 Verify one record end to end after editing: the `reproducer` must still produce
 the quoted line, and the summary must no longer claim `tool-failed`.
+
+- [ ] **Step 5a: Correct the `foundation-bridge` record's wrong counts**
+
+This is a different species from both Defect 1 and Defect 2: the record's
+numbers were never right, and the tooling did not change.
+
+`subsystems/foundation-bridge/evidence/foundation-shim-c-symbols-nm-cf8c8657.json`
+claims the BridgeSupport shim exports **46** `_NS*` symbols and **126** symbols
+in the dylib total. Measured twice — through the wrapper and through raw
+`nm -gU` — the real figures are **118** and **122**. The shim's mtime is
+2025-07-17, so it has not changed since the record was written.
+
+The shim's 122 symbols are exactly 118 `_NS*` plus 4 `_CFBridging*`, with none
+others. Verify that before editing:
+
+```bash
+SHIM=/System/Library/Frameworks/Foundation.framework/Versions/C/Resources/BridgeSupport/Foundation.dylib
+nm -gU "$SHIM" | grep -cE '^[0-9a-fA-F]+ [A-Za-z] _NS'
+nm -gU "$SHIM" | grep -cE '^[0-9a-fA-F]+ [A-Za-z] '
+nm -gU "$SHIM" | grep -cE '^[0-9a-fA-F]+ [A-Za-z] _CFBridging'
+```
+
+Then, in that record only:
+- Correct the two counts in `observation.summary`.
+- Correct the `claim` if it states the counts.
+- **Do not change** `claim_status` (still `observed`) and **do not lower
+  `confidence`** — the underlying claim (that the shim re-exports the
+  `_CFBridgingRetain`/`_CFBridgingRelease` toll-free helpers and the
+  `_NS*` family, and that the real ObjC implementations live in the shared
+  cache) is TRUE and was verified. Only the numbers attached to it were wrong.
+- Correct `reproducer` if it names a figure the command does not produce.
 
 - [ ] **Step 5c: Guard the cache-backed fallback against a malformed child payload**
 
