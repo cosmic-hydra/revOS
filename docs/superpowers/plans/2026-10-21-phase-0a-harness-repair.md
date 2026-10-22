@@ -1876,8 +1876,65 @@ a stable root.
 **(d) Cosmetic — the failure line duplicates the filename.** The output reads
 `FAIL phantom.json: phantom.json: status=...` because `_walk` is called with
 `path.name` as its path root and the caller then prefixes `path.name` again.
-Call `_walk` with an empty root and let the caller supply the prefix, so the
-message reads `FAIL phantom.json: status=...`.
+
+Call `_walk` with an **empty** path root so the message reads
+`FAIL phantom.json: status=...` — but note that `_walk` formats errors as
+`f"{path}: …"`, so with an empty root the message would be
+`FAIL phantom.json: : missing required key 'y'` (a leading `": "`). **Strip the
+empty root prefix** so the message carries exactly one colon. Do not pass
+`""` blind.
+
+**(e) An ABSENT `gap-ledger/gaps/` still exits 0 having examined nothing.**
+`iter_gap_files` returns `[]` when `gaps_dir(root)` is not a directory, and
+`main` turns an empty list into `print("no gap records found…")` + `return 0`.
+That is the same vacuity the draft bug had, with only the message text changed
+— and it becomes live the moment Task 7 wires
+`python3 scripts/lib/validate_gap_ledger.py .` into CI with a wrong working
+directory.
+
+**"Empty" and "absent" are different conditions, and only the first should
+pass.** An absent directory means the ledger is missing, which is a defect, not
+an empty ledger. Change the absent case to a non-zero exit with a loud,
+distinct message; keep exit 0 for a directory that exists and is genuinely
+empty. The plan's Step 4 ("empty ledger exits 0") still holds — it just must
+distinguish the two.
+
+**(f) The artifact over-claims its own spec coverage.** The module docstring
+says it "enforce[s] the five invariants from the revOS production-reimplementation
+design spec", and the commit message says the same. As shipped it covers three
+of the spec's five and a fourth only in part. In a repo whose stated hard rule
+is that claims must not overstate what was verified, an authoritative-looking
+docstring is the wrong place to be loose.
+
+Number the invariant comments to the spec's §5.2 numbering and **mark item 4
+as unimplemented** while it is unimplemented, so the code does not claim
+coverage it does not have. Once (c) lands, item 4 becomes enforced and the
+comment changes to say so. Also fix the docstring's output path — it says
+`--write-index regenerates gap-ledger/index.json`, but the code writes
+`gap-ledger/gaps/index.json`. Task 7's CI wiring will read this docstring
+first.
+
+**(g) `write_index` writes an index built from records that just FAILED
+validation, and crashes on malformed JSON.** Two confirmed defects:
+
+- `main` calls `write_index(root)` unconditionally and **before** the failures
+  are printed, so a run reporting `0 ok, 2 failing` and exiting 1 still
+  rewrites the index from *unvalidated* records — including the rejected one.
+  `gap-ledger/gaps/index.json` is a committed artifact, so a failed local run
+  can leave a wrong index staged for commit.
+- `write_index` calls `json.load(fh)` with no guard, while the main loop
+  handles the same case cleanly. A malformed record turns the legible
+  `FAIL … json decode error` diagnostic into a traceback.
+
+**Gate the `write_index` call on `not failures`, and build the index from the
+payloads already parsed in the main loop rather than re-reading the files.**
+That removes the crash, removes the "index built from rejected records"
+path, and avoids a second parse.
+
+**(h) Unknown flags are silently ignored.** `main` filters *any* `--*` token out
+of the positional list, so `--write_index`, `--write-index=0` and `-w` are all
+no-ops that still exit 0. A typo in the Task 7 CI wiring would fail open.
+Reject unrecognised flags explicitly.
 
 - [ ] **Step 7: Verify `--write-index` generates the index**
 
@@ -2230,6 +2287,45 @@ chmod +x scripts/bin/revos-ci
 bash scripts/bin/revos-ci
 ```
 Expected: every job reports `PASS` and the script prints `OK: all jobs passed`, exit 0. The `license-check` job passes when `third_party/` is empty or every vendored tree carries a licence file — it must not fail the run today.
+
+- [ ] **Step 4c: Add a gap-ledger index regenerate-and-diff job**
+
+`gap-ledger/gaps/index.json` is a **committed generated artifact** and nothing
+regenerates or diffs it, so it can drift silently — and a failed local
+validator run can leave a wrong index staged (the Task 6 review found the
+validator would write an index built from records it had just rejected).
+
+Add a job that regenerates the index and fails if it differs from what is
+committed:
+
+```yaml
+  gap-ledger-index:
+    name: gap-ledger index is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate and diff
+        run: |
+          set -euo pipefail
+          python3 scripts/lib/validate_gap_ledger.py . --write-index
+          if ! git diff --quiet -- gap-ledger/gaps/index.json; then
+            echo "::error::gap-ledger/gaps/index.json is stale — run 'python3 scripts/lib/validate_gap_ledger.py . --write-index' and commit the result"
+            git diff -- gap-ledger/gaps/index.json
+            exit 1
+          fi
+```
+
+Note the validator must be invoked from the **repository root** — the ledger
+directory is resolved relative to it — and the Task 6 fix makes an absent
+`gap-ledger/gaps/` a loud non-zero exit rather than a silent pass, so a
+mis-rooted invocation fails this job instead of passing it.
 
 - [ ] **Step 4b: Add a three-shape wrapper fixture**
 
