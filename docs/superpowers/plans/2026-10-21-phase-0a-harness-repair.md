@@ -1005,7 +1005,171 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
 
 ---
 
-### Task 5: Add the gap-ledger schema and validator
+### Task 5: Host-native default slice, and a corpus slice-attribution audit
+
+**Files:**
+- Modify: `scripts/bin/dyld-info-exports` (default slice selection)
+- Create: `scripts/lib/audit_slice_attribution.py`
+- Modify: `subsystems/libdispatch/evidence/*.json` (correction of wrong-slice addresses — the `libdispatch` subsystem owns these files; this task is an explicitly granted ownership exception, recorded in the ledger)
+
+**Interfaces:**
+- Consumes: `scripts/bin/dyld-info-exports` from Task 2 (whose fix round 1 bounded the export parse to a single slice); the 12 libdispatch evidence records.
+- Produces: `python3 scripts/lib/audit_slice_attribution.py [ROOT_DIR]` → exit 0 when every cited address is attributable to the slice its record claims, exit 1 with one line per violation. `scripts/bin/dyld-info-exports` with no `--arch` now selects the **host-native** slice.
+
+**Background — why this task exists.** Task 2's review found that `dyld_info -exports` on a fat dylib emits one section per slice, and that the original wrapper merged them under the first slice's arch label. Fixing that exposed a **pre-existing defect in the shipped evidence corpus**, which this task corrects.
+
+Measured on this host:
+
+```
+nm -arch arm64e -gU libdispatch.dylib | grep ' T _dispatch_async$'
+  000000000000a100 T _dispatch_async          <- arm64e
+nm -arch x86_64 -gU libdispatch.dylib | grep ' T _dispatch_async$'
+  0000000000008827 T _dispatch_async          <- x86_64
+```
+
+`libdispatch.dylib` is a fat binary with slices `x86_64 arm64e`. **11 of the 12 libdispatch evidence records cite x86_64 addresses while their `observation.tool_invocation` says `nm -arch arm64e -gU`.** Only `dispatch_queue_create` (address `0xc2c4`) is correct. The likely cause: `nm -gU` with no `-arch` dumps **all** slices with x86_64 first, and the quoted output came from that run while the recorded invocation named the arm64e run.
+
+This is a **provenance defect**, not merely a wrong number. The repo's honesty contract requires `observation.tool_invocation` to be the command that produced the quoted output. The symbol identities, presence/absence claims, and counts in those records remain correct — the API surface of libdispatch is identical across slices. Only the addresses and the stated invocation are wrong.
+
+**Address space note.** `nm` reports *symbol table* addresses; `dyld_info -exports` reports *export trie* addresses. They are different address spaces and are usually but not always equal. The audit tool must therefore build its per-slice tables with the SAME tool family the record claims, and never compare an `nm` address against an export-trie table.
+
+- [ ] **Step 1: Change the default slice selection to host-native**
+
+Currently the wrapper selects the **first** section in fat-header order, which is `x86_64` on this host — even though the host is arm64 and the entire evidence corpus was built from the arm64e slice. `nm` with no `-arch` dumps every slice, so there is no "nm default" to match; the useful default is the slice **this machine actually runs**.
+
+Required behaviour:
+- `--arch=ARCH` selects the slice named `ARCH`.
+- No `--arch` → select the **host-native** slice. On an arm64 host that is `arm64e` when the image has it, else `arm64`; on an x86_64 host, `x86_64`. If the image has only one slice, that one is used regardless.
+- `observations.arch` and `observations.exports` must always describe the same slice.
+- A cache-backed image has exactly one slice and must still yield `arm64e` / **3098** for CoreFoundation.
+
+Implement by parsing **all** section headers from the `dyld_info -exports` output, grouping the export lines under their owning header, then selecting the group. Prefer not to re-invoke `dyld_info` a second time.
+
+- [ ] **Step 2: Verify the new default selection**
+
+Run:
+```bash
+cd /Users/vaithianathan/revOS-work/revOS/.worktrees/phase-0a
+bash scripts/bin/dyld-info-exports /usr/lib/system/introspection/libdispatch.dylib | jq -c '{arch: .observations.arch, total: .observations.total}'
+bash scripts/bin/dyld-info-exports /usr/lib/system/libsystem_kernel.dylib | jq -c '{arch: .observations.arch, total: .observations.total}'
+bash scripts/bin/dyld-info-exports /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation | jq -c '{arch: .observations.arch, total: .observations.total}'
+```
+Expected on this arm64 host: `arm64e` for all three, with totals 419 (libdispatch arm64e), 1614 (libsystem_kernel arm64e), and **3098** (CoreFoundation).
+
+Also confirm the explicit form still wins:
+```bash
+bash scripts/bin/dyld-info-exports --arch=x86_64 /usr/lib/system/libsystem_kernel.dylib | jq -c '{arch: .observations.arch, total: .observations.total}'
+```
+Expected: `x86_64`, 1611.
+
+- [ ] **Step 3: Write the slice-attribution audit tool**
+
+Create `scripts/lib/audit_slice_attribution.py`. It must:
+
+1. Walk every `subsystems/*/evidence/*.json`.
+2. For each record, read `source_artifact.path` and `observation.tool_invocation`.
+3. From the invocation, determine the **tool family** (`nm` or `dyld_info`) and the **claimed arch** (the `-arch` argument, or `UNSPECIFIED`).
+4. Build per-slice symbol→address tables for the artifact using **that tool family** — `nm -arch <slice> -gU` or `dyld_info -arch <slice> -exports`. Cache per (artifact, tool family) so the audit is not quadratic. Note that some Apple-private symbols are absent from `nm` and present only in the export trie, and vice versa; build **both** tables and look the symbol up in either.
+5. Extract every `(address, symbol)` pair the record quotes, from `observation.raw_output_excerpt`, `observation.summary`, and `claim`. Accept both the `nm` form (`000000000000a100 T _sym`) and the `dyld_info` form (`0x0000A100  _sym`).
+6. For each pair, determine which slices place that symbol at that address. A pair is **CORRECT** when the claimed arch is among them. A pair is **MISMATCH** when it is not — that is the defect: the record quotes an address from a slice it does not claim.
+7. Print one line per violation as `MISMATCH <file> <symbol> <address> claimed=<arch> actual=<slices>` and exit 1 if any exist, else print the count and exit 0.
+
+The tool must not modify anything. It is a detector; the correction is a separate, explicit step.
+
+- [ ] **Step 4: Run the audit and confirm it detects the known defect**
+
+Run:
+```bash
+cd /Users/vaithianathan/revOS-work/revOS/.worktrees/phase-0a
+python3 scripts/lib/audit_slice_attribution.py .
+```
+Expected: exit 1 with a `MISMATCH` line for each affected libdispatch record. If it reports zero, the tool is not detecting the defect it was written for — fix the tool before going on.
+
+- [ ] **Step 5: Correct the affected libdispatch records**
+
+For **each** record the audit flags:
+
+1. Re-derive the correct arm64e observation with the tool the record actually uses:
+   ```bash
+   nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | grep -E ' T _dispatch_async$'
+   ```
+2. Update `observation.raw_output_excerpt` to the **arm64e** output line.
+3. Update `observation.summary` so it states the arm64e address and slice, not the x86_64 one.
+4. Update `observation.tool_invocation` if the quoted output was not produced by the recorded command — after this task it will have been, so the recorded invocation becomes true.
+5. Update `claim` if it quotes a specific offset.
+6. Leave `claim_status` and `confidence` unchanged **unless** re-derivation shows the underlying claim is wrong, in which case lower `confidence` and record why in `summary`.
+7. Leave `subsystem`, `subject`, `subject_kind`, `cross_reference`, `reproducer` alone unless they also carry a wrong slice.
+
+`dispatch_source_type_data_add` needs special care: its symbol is Apple-private and absent from `nm`, so the audit tool may not flag it. Verify it by hand:
+```bash
+dyld_info -arch arm64e -exports /usr/lib/system/introspection/libdispatch.dylib | grep -E '__dispatch_source_type_data_add$'
+dyld_info -arch x86_64  -exports /usr/lib/system/introspection/libdispatch.dylib | grep -E '__dispatch_source_type_data_add$'
+```
+The record currently quotes the x86_64 address (`0x00068240`). Correct it to the arm64e address and fix the accompanying count reasoning — the record's current text divides a merged 38 by two arches to obtain 19; after correction it should derive 19 from a single arm64e section.
+
+- [ ] **Step 6: Re-run the audit until it is clean**
+
+Run:
+```bash
+cd /Users/vaithianathan/revOS-work/revOS/.worktrees/phase-0a
+python3 scripts/lib/audit_slice_attribution.py .
+```
+Expected: exit 0, zero `MISMATCH` lines, and a stated count of records checked.
+
+Then confirm the evidence corpus still validates:
+```bash
+python3 scripts/lib/validate_evidence.py . | tail -1
+```
+Expected: `validated 76 evidence records: 76 ok, 0 failing`.
+
+- [ ] **Step 7: Confirm the correction is real, not cosmetic**
+
+Spot-check at least three corrected records against a fresh arm64e run:
+```bash
+cd /Users/vaithianathan/revOS-work/revOS/.worktrees/phase-0a
+for s in _dispatch_async _dispatch_main _dispatch_group_create; do
+  printf "  %-26s " "$s"
+  nm -arch arm64e -gU /usr/lib/system/introspection/libdispatch.dylib | awk -v s="$s" '$3==s{print $1}'
+done
+```
+Each printed address must equal the address quoted in the corresponding corrected record.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /Users/vaithianathan/revOS-work/revOS/.worktrees/phase-0a
+git add scripts/bin/dyld-info-exports scripts/lib/audit_slice_attribution.py subsystems/libdispatch/evidence/
+git diff --cached --name-only
+git commit -m "fix(corpus): correct wrong-slice addresses in libdispatch evidence
+
+Task 2's review found that dyld_info -exports emits one section per slice and
+that the original wrapper merged them under the first slice's arch label.
+Fixing that exposed a pre-existing defect in the shipped corpus.
+
+libdispatch.dylib is a fat binary with slices x86_64 and arm64e. 11 of its 12
+evidence records quote x86_64 addresses while their observation.tool_invocation
+says 'nm -arch arm64e -gU'. Only dispatch_queue_create is correct. The quoted
+output came from an nm run without -arch, which dumps every slice with x86_64
+first.
+
+This is a provenance defect as much as a wrong number: the honesty contract
+requires tool_invocation to be the command that produced the quoted output. The
+symbol identities, presence/absence claims and API-surface counts are all
+unaffected — libdispatch exports the same surface on both slices.
+
+- dyld-info-exports now defaults to the host-native slice instead of the first
+  fat-header slice, so a default invocation on this arm64 host reports arm64e
+  rather than x86_64.
+- New scripts/lib/audit_slice_attribution.py attributes every cited address in
+  the corpus to a slice and compares it against the slice each record claims.
+  It is a detector, so this class of defect cannot recur silently.
+- The affected libdispatch records are corrected to their arm64e addresses.
+
+No claim changes status: every affected record was already claim_status
+observed, and the observation is re-derived rather than assumed."
+```
+
+### Task 6: Add the gap-ledger schema and validator
 
 **Files:**
 - Create: `gap-ledger/schema.json`
@@ -1408,7 +1572,7 @@ reverification.status='not-yet-checked'; Phase 0b resolves it."
 
 ---
 
-### Task 6: Wire CI, add a local CI runner, and lay down release scaffolding
+### Task 7: Wire CI, add a local CI runner, and lay down release scaffolding
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
