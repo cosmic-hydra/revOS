@@ -197,9 +197,14 @@ echo "$SHELL_FILES" | wc -l   # expect 6
 Run:
 ```bash
 cd /Users/vaithianathan/revOS-work/revOS
-bash scripts/bin/nm-symbols --filter='^_CF' /usr/lib/system/libsystem_pthread.dylib | jq '.status, .observations.total'
+bash scripts/bin/nm-symbols --filter='^_pthread' /usr/lib/system/libsystem_pthread.dylib | jq '.status, .observations.total'
 ```
-Expected: `"ok"` and a non-zero `observations.total`.
+Expected: `"ok"` and `observations.total` of **139**.
+
+`libsystem_pthread.dylib` exports 209 symbols in total, of which 139 are
+`_pthread*` and **none** are `_CF*`. A filter of `^_CF` therefore correctly
+returns 0 — that is the filter matching nothing, not a wrapper fault. Use
+`^_pthread` to get a non-zero count from this control binary.
 
 - [ ] **Step 8: Commit**
 
@@ -221,7 +226,8 @@ so it could never recover. CI has been red on every commit since 564580e.
 - Removed an unused rc capture in rea-call (SC2034).
 - Scoped SC2034 disables to the two common.sh assignments that sourcing
   wrappers consume, rather than excluding SC2034 repo-wide."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 ---
@@ -427,7 +433,8 @@ matching the count independently recorded by the cf-types agent.
 
 The reported arch is parsed from the dyld_info output header rather than the
 --arch flag, because the arm64e cache holds only the arm64e slice."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 ---
@@ -642,7 +649,8 @@ detour each.
 
 Verified: nm-symbols on CoreFoundation now returns 3098 symbols with
 source_tool=dyld_info; the on-disk path is unchanged."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 ---
@@ -959,7 +967,8 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
   'present but traps' (getCFRunLoop on Linux) is a different problem from
   'absent', and 'publicly absent but privately present' is a third.
   Default mode is static and never executes target code."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 ---
@@ -1361,7 +1370,8 @@ gap whose reverification.status is 'closed-upstream' must have status
 
 One fixture gap is included (cf-string-tagged-pointer) with
 reverification.status='not-yet-checked'; Phase 0b resolves it."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 ---
@@ -1673,7 +1683,8 @@ git commit -m "chore(harness): wire CI, add a local CI runner, and lay down rele
   cost one commit and nearly a milestone.
 - README documents the cache-backed framework situation and the wrappers that
   handle it."
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 ```
 
 - [ ] **Step 10: Verify CI is green on the remote**
@@ -1681,7 +1692,8 @@ git push origin main
 Run:
 ```bash
 cd /Users/vaithianathan/revOS-work/revOS
-git push origin main
+# Do not push. The controller reviews this branch and merges it to `main`
+# after the task review passes.
 gh run list --repo cosmic-hydra/revOS --limit 3
 ```
 Expected: the newest run reports `completed success`. If the `lint-shell` job still fails, run the exact CI command locally and fix before pushing again — do not merge red.
@@ -1734,6 +1746,22 @@ classifies `works` / `missing` / `private` statically and never assigns `traps`;
 the `traps` state is reserved for the Phase 0c runtime probe harness, which is
 out of scope for this plan. The `--help` text says so explicitly. A reviewer
 should not expect `traps` to be populated by this task.
+
+**Plan amendments, made mid-execution.** Two defects were found by the Task 1
+implementer and corrected here rather than in the code, because both were
+errors in the plan's own expectations:
+
+1. Task 1 Step 7 expected a non-zero `observations.total` for the filter
+   `^_CF` against `libsystem_pthread.dylib`. That dylib exports 209 symbols,
+   139 of them `_pthread*` and **none** `_CF*`, so a `^_CF` filter correctly
+   returns 0. The expectation was wrong, not the wrapper. The step now uses
+   `^_pthread` and expects 139. The implementer correctly refused to
+   substitute a different binary to make the number look right.
+2. Every task's commit step ended with `git push origin main`, inherited from
+   the direct-commit workflow this plan was first drafted against. Under the
+   branch-and-review workflow the plan actually executes, an implementer
+   commits to its branch and the controller merges to `main` after the task
+   review passes. The commit steps now say so.
 
 **Every `jq` program in this plan was executed against real output before the
 plan was committed.** Three defects were found and fixed in the process, and the
