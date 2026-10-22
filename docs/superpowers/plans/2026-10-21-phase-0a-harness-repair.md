@@ -1181,6 +1181,23 @@ with exit code 2, not a confusing `tool-failed` about a path named `arm64e`.
 The implementer documented this as an accepted limitation in Task 4; closing it
 here keeps the two wrappers consistent.
 
+**Three Minor residuals from the Task 4 re-review, closed here because this is
+the task that owns the file.**
+
+1. **`--symbols=` with an empty flag VALUE still returns the entire trie.**
+   `${arg#--symbols=}` yields `""` for `--symbols=`, which is indistinguishable
+   from "flag absent", so the wrapper answers 3098 unrequested verdicts. This is
+   the same symptom as the Task 4 Important 2, reached by a different trigger
+   (an empty *value* rather than an empty *file*). Close it with a
+   flag-presence flag — e.g. set `symbols_flag_set=1` when the argument is
+   present, and test that instead of `-n "$symbols_file"`.
+2. **The `--help` Notes still reference a `--call` mode that does not exist**,
+   while the file's own header comment correctly says the wrapper "never
+   assigns" `traps`. Remove the dangling reference.
+3. **The `--help` exit-code line omits the `tool-not-installed` branch** (shell
+   exit 0, envelope `exit_code: 127`), which the sibling documents. The line is
+   not false, only incomplete. Add it.
+
 - [ ] **Step 3: Write the slice-attribution audit tool**
 
 Create `scripts/lib/audit_slice_attribution.py`. It must:
