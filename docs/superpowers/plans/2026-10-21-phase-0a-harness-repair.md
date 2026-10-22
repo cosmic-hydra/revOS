@@ -570,10 +570,19 @@ if [[ "${BIN_VALID:-missing}" == "cache-backed" ]]; then
     # quote this output verbatim.
     # `binary` is REQUIRED by scripts/bin/output-schema.json, so the fallback
     # envelope must carry it. The wrapper's own envelope has it; pass it through.
+    # `arch` MUST be passed through. The brief's own Note requires it ("the
+    # fallback must simply pass through whatever `arch` and `exports` the
+    # wrapper reports"), and dyld-info-exports goes out of its way to compute
+    # and justify reported_arch precisely because a mislabelled slice is silent
+    # wrong data. An evidence record quoting this output must be able to state
+    # which slice its symbols came from.
+    # `exit_code` is hard-coded 0 because the guard above has already proven
+    # .status == "ok"; relaying it could only ever contradict the status.
     printf '%s' "$fallback" | jq --arg source_tool "dyld_info" \
-      '{tool: "nm", binary: .binary, source_tool: $source_tool, status: .status, exit_code: .exit_code,
+      '{tool: "nm", binary: .binary, source_tool: $source_tool, status: .status, exit_code: 0,
         duration_ms: .duration_ms,
-        observations: {symbols: [.observations.exports[] | {address, kind: null, name, section: null}],
+        observations: {arch: .observations.arch,
+                       symbols: [.observations.exports[] | {address, kind: null, name, section: null}],
                        total: .observations.total, kind_unknown: true}}'
     exit 0
   fi
@@ -1938,6 +1947,50 @@ bash scripts/bin/revos-ci
 ```
 Expected: every job reports `PASS` and the script prints `OK: all jobs passed`, exit 0. The `license-check` job passes when `third_party/` is empty or every vendored tree carries a licence file — it must not fail the run today.
 
+- [ ] **Step 4b: Add a three-shape wrapper fixture**
+
+The Task 3 reviewer noted that the single highest-value case — a dangling
+symlink that is NOT cache-resident must stay `tool-failed` rather than being
+misreported as `cache-backed` — has no automated guard, because the repo has no
+`tests/` directory. Once `scripts/lib/validate_wrapper_output.py` exists, add
+the fixture beside it so that shape cannot regress silently.
+
+Create `scripts/lib/fixtures/wrapper_shapes.sh`:
+
+```bash
+#!/usr/bin/env bash
+# scripts/lib/fixtures/wrapper_shapes.sh
+#
+# Three input shapes a wrapper must handle differently:
+#   1. a real on-disk dylib          -> status ok
+#   2. a cache-backed framework stub -> status ok via the dyld_info fallback
+#   3. a dangling symlink to nowhere  -> status tool-failed
+#
+# The third is the regression guard: it must NOT be reported as cache-backed.
+# Usage: scripts/lib/fixtures/wrapper_shapes.sh <wrapper>
+set -eu
+
+wrapper="${1:?usage: wrapper_shapes.sh <wrapper>}"
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+real=/usr/lib/system/libsystem_pthread.dylib
+stub=/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+dangling="$tmpdir/dangling"
+ln -sf /nonexistent-target "$dangling"
+
+status_of() {
+  bash "$wrapper" "$1" 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unparseable"
+}
+
+printf '  real      %-58s %s\n' "$real" "$(status_of "$real")"
+printf '  cache     %-58s %s\n' "$stub" "$(status_of "$stub")"
+printf '  dangling  %-58s %s\n' "$dangling" "$(status_of "$dangling")"
+```
+
+Expected on this host: `ok`, `ok`, `tool-failed`. A `cache-backed` status for the
+dangling path is a defect.
+
 - [ ] **Step 5: Extend the CI workflow with the new jobs**
 
 In `.github/workflows/ci.yml`, add these two jobs after the existing `validate-evidence` job:
@@ -2162,6 +2215,17 @@ errors in the plan's own expectations:
    `exit 1`, which makes it conform to the house convention rather than
    diverge from it. The implementer flagged the behaviour change rather than
    making it silently.
+5. The Task 3 fallback's jq program dropped `observations.arch` while the
+   brief's own Note required the fallback to "pass through whatever `arch`
+   and `exports` the wrapper reports" — the brief contradicted itself between
+   its prose and its code block. The code block was the defect. `arch` is now
+   passed through, and `exit_code` is hard-coded 0 because the guard has
+   already proven `status == "ok"`.
+6. `nm-symbols` had a second `tool-failed` site — the `nm -gU failed` branch —
+   that exited **0** while its envelope claimed `exit_code: 1`. Now exits 1,
+   matching every other tool-failed path. (`emit_tool_missing` exiting 0 is a
+   separate, deliberate house convention, consistent across all wrappers, and
+   is left alone.)
 
 **Every `jq` program in this plan was executed against real output before the
 plan was committed.** Three defects were found and fixed in the process, and the
