@@ -1070,6 +1070,7 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
 
 **Files:**
 - Modify: `scripts/bin/dyld-info-exports` (default slice selection)
+- Modify: `scripts/bin/capability-probe` (delegate its export extraction to `dyld-info-exports` instead of re-parsing the export trie; adopt the same `--arch` invocation-error guard)
 - Create: `scripts/lib/audit_slice_attribution.py`
 - Modify: `subsystems/libdispatch/evidence/*.json` (correction of wrong-slice addresses — the `libdispatch` subsystem owns these files; this task is an explicitly granted ownership exception, recorded in the ledger)
 
@@ -1146,6 +1147,39 @@ Also confirm the explicit form still wins:
 bash scripts/bin/dyld-info-exports --arch=x86_64 /usr/lib/system/libsystem_kernel.dylib | jq -c '{arch: .observations.arch, total: .observations.total}'
 ```
 Expected: `x86_64`, 1611.
+
+- [ ] **Step 2c: Make `capability-probe` delegate to `dyld-info-exports`**
+
+`capability-probe` currently re-implements the export-trie parse. That is a
+**second copy of the same logic**, and it has already caused harm: Task 4's
+brief carried the same multi-slice double-counting bug that Task 2's review had
+just caught in `dyld-info-exports` (`/bin/ls` → total 2, distinct 1). A second
+copy of a parser is a second place for the slice logic to drift, and the
+host-native default this task introduces would have to be implemented twice.
+
+So: **`capability-probe` must not parse the export trie itself.** It should
+invoke the sibling wrapper — the same way `nm-symbols` does — and use the
+`observations.exports` array it returns:
+
+```bash
+# The sibling wrapper, relative to THIS wrapper's own directory. Every wrapper
+# does `cd "$(dirname "$0")"` at the top, so the cwd is already scripts/bin.
+exports=$(bash ./dyld-info-exports ${arch:+--arch="$arch"} ${filter:+--filter="$filter"} "$BINARY" 2>/dev/null || true)
+if [[ -z "$exports" ]] || ! printf '%s' "$exports" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+  emit_tool_failed "dyld_info" "$BINARY" "dyld_info -exports failed for $BINARY"
+  exit 1
+fi
+```
+
+Then classify using the returned `observations.exports` and `observations.arch`.
+The `arch` the child reports is the slice the exports came from, so the
+`works`/`private` split and the arch label are consistent by construction.
+
+Also add the space-separated-flag guard that `dyld-info-exports` already has:
+`--arch arm64e <path>` (space form) must produce `status: "invocation-error"`
+with exit code 2, not a confusing `tool-failed` about a path named `arm64e`.
+The implementer documented this as an accepted limitation in Task 4; closing it
+here keeps the two wrappers consistent.
 
 - [ ] **Step 3: Write the slice-attribution audit tool**
 
@@ -2303,7 +2337,20 @@ errors in the plan's own expectations:
    matching every other tool-failed path. (`emit_tool_missing` exiting 0 is a
    separate, deliberate house convention, consistent across all wrappers, and
    is left alone.)
-7. The Task 3 re-review surfaced a **second, different** corpus defect: 26
+7. The Task 4 brief **re-introduced the exact slice-mixing bug** that Task 2's
+   review had just caught in `dyld-info-exports`: its `capability-probe` parse
+   collected every slice of a universal binary without bounding to one section
+   (`/bin/ls` → total 2, distinct 1). The Task 4 implementer caught it
+   independently by testing a universal binary. A second copy of the export-trie
+   parser is a second place for the slice logic to drift, so Task 5 now makes
+   `capability-probe` **delegate** to `dyld-info-exports` rather than re-parsing
+   the trie — one place owns "which slice, which exports", and the host-native
+   default applies to both wrappers at once.
+8. The Task 4 brief's Step 2 was **a verification that verified nothing**: the
+   schema-acceptance probe record was placed outside `subsystems/`, the only tree
+   `validate_evidence.py` scans, so the command exited 0 having checked zero
+   records. The implementer noticed and re-ran it with the record in place.
+9. The Task 3 re-review surfaced a **second, different** corpus defect: 26
    `cf-runtime` records plus 1 `foundation-bridge` record describe the
    *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
    and otool-exports both return status=tool-failed against this path"). That
