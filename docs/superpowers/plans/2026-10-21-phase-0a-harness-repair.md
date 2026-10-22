@@ -2350,6 +2350,16 @@ errors in the plan's own expectations:
    schema-acceptance probe record was placed outside `subsystems/`, the only tree
    `validate_evidence.py` scans, so the command exited 0 having checked zero
    records. The implementer noticed and re-ran it with the record in place.
+9. The Task 3 re-review surfaced a **second, different** corpus defect: 26
+   `cf-runtime` records plus 1 `foundation-bridge` record describe the
+   *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
+   and otool-exports both return status=tool-failed against this path"). That
+   was true when observed and is false now. Unlike the slice contamination,
+   the quoted output and the `reproducer` are **still correct and still
+   reproduce exactly** — only the prose is stale. Task 5 now audits and
+   corrects this as a second dimension, and the audit tool gained a
+   `STALE-NARRATIVE` check so the class cannot recur.
+
 10. The Task 4 review found three more defects in the brief's `capability-probe`
     code, all now fixed: the envelope carried **no slice label** (so a
     `missing` verdict meant "absent from the x86_64 slice" with nothing
@@ -2364,15 +2374,6 @@ errors in the plan's own expectations:
     `ok, total 0` instead of failing; and the per-symbol loop spawned ~3
     processes per symbol, which is pathological at the scale Task 5's audit
     tool needs.
-9. The Task 3 re-review surfaced a **second, different** corpus defect: 26
-   `cf-runtime` records plus 1 `foundation-bridge` record describe the
-   *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
-   and otool-exports both return status=tool-failed against this path"). That
-   was true when observed and is false now. Unlike the slice contamination,
-   the quoted output and the `reproducer` are **still correct and still
-   reproduce exactly** — only the prose is stale. Task 5 now audits and
-   corrects this as a second dimension, and the audit tool gained a
-   `STALE-NARRATIVE` check so the class cannot recur.
 
 **Every `jq` program in this plan was executed against real output before the
 plan was committed.** Three defects were found and fixed in the process, and the
