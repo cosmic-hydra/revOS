@@ -1095,6 +1095,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Reuse the JSON-Schema subset walker from the evidence validator rather than
+# duplicating it. Both live in scripts/lib/, so Python puts that directory on
+# sys.path[0] when this file is invoked as a script. One implementation means
+# one set of semantics for 'required', 'additionalProperties', 'pattern', and
+# the rest.
+from validate_evidence import _walk
+
 SCHEMA_FILE = Path(__file__).resolve().parent.parent.parent / "gap-ledger" / "schema.json"
 GAPS_DIRNAME = "gaps"
 INDEX_FILE = "index.json"
@@ -1103,60 +1110,6 @@ INDEX_FILE = "index.json"
 def load_schema() -> dict[str, Any]:
     with SCHEMA_FILE.open() as fh:
         return json.load(fh)
-
-
-def _walk(instance: Any, schema: dict[str, Any], path: str = "") -> list[str]:
-    """Minimal JSON-Schema subset validator, matching the style of
-    scripts/lib/validate_evidence.py so the two behave the same way."""
-    errors: list[str] = []
-    if "enum" in schema:
-        if instance not in schema["enum"]:
-            errors.append(f"{path}: value {instance!r} not in enum {schema['enum']!r}")
-        return errors
-    typ = schema.get("type")
-    if typ == "object":
-        if not isinstance(instance, dict):
-            return [f"{path}: expected type object, got {type(instance).__name__}"]
-        for key in schema.get("required", []):
-            if key not in instance:
-                errors.append(f"{path}: missing required key {key!r}")
-        props = schema.get("properties", {})
-        if schema.get("additionalProperties") is False:
-            for key in instance:
-                if key not in props:
-                    errors.append(f"{path}: unexpected additional property {key!r}")
-        for key, sub in props.items():
-            if key in instance:
-                errors.extend(_walk(instance[key], sub, f"{path}.{key}"))
-        return errors
-    if typ == "array":
-        if not isinstance(instance, list):
-            return [f"{path}: expected type array, got {type(instance).__name__}"]
-        if "minItems" in schema and len(instance) < schema["minItems"]:
-            errors.append(f"{path}: array has {len(instance)} items, minItems={schema['minItems']}")
-        for idx, item in enumerate(instance):
-            errors.extend(_walk(item, schema.get("items", {}), f"{path}[{idx}]"))
-        return errors
-    if typ == "string":
-        if not isinstance(instance, str):
-            return [f"{path}: expected type string, got {type(instance).__name__}"]
-        if "minLength" in schema and len(instance) < schema["minLength"]:
-            errors.append(f"{path}: string shorter than minLength={schema['minLength']}")
-        if "pattern" in schema:
-            import re
-
-            if not re.match(schema["pattern"], instance):
-                errors.append(f"{path}: {instance!r} does not match pattern {schema['pattern']!r}")
-        return errors
-    if typ == "number":
-        if not isinstance(instance, (int, float)) or isinstance(instance, bool):
-            return [f"{path}: expected type number, got {type(instance).__name__}"]
-        if "minimum" in schema and instance < schema["minimum"]:
-            errors.append(f"{path}: value {instance!r} below minimum={schema['minimum']}")
-        if "maximum" in schema and instance > schema["maximum"]:
-            errors.append(f"{path}: value {instance!r} above maximum={schema['maximum']}")
-        return errors
-    return errors
 
 
 def iter_gap_files(root: Path) -> list[Path]:
@@ -1307,7 +1260,7 @@ Create `gap-ledger/gaps/cf-string-tagged-pointer.json` with content:
   "subsystem": "cf-types",
   "gap_statement": "macOS 27 exports a CFString tagged-pointer fast path that CF-Lite 1153.18 does not contain.",
   "evidence_refs": [
-    "subsystems/cf-types/evidence/cfstringcreatetaggedpointerstring-55c58b30c63b.json"
+    "subsystems/cf-types/evidence/cfstringcreatetaggedpointerstring.json"
   ],
   "upstream": {
     "repo": "apple-oss-distributions/CF",
@@ -1332,7 +1285,15 @@ Run:
 cd /Users/vaithianathan/revOS-work/revOS
 python3 scripts/lib/validate_gap_ledger.py .
 ```
-Expected: `validated 1 gap records: 1 ok, 0 failing` and exit code 0. If the `evidence_refs` path does not resolve, list the actual filenames in `subsystems/cf-types/evidence/` and correct the reference — the invariant is real and must not be weakened.
+Expected: `validated 1 gap records: 1 ok, 0 failing` and exit code 0.
+
+The `evidence_refs` path above is the real filename on disk
+(`cfstringcreatetaggedpointerstring.json` — the `cf-types` agent used plain
+names, while the `cf-runtime` agent used hash suffixes, so the two
+subsystems' evidence filenames do not share a convention). If it does not
+resolve, list the actual filenames with
+`ls subsystems/cf-types/evidence/` and correct the reference. The invariant
+is real and must not be weakened to make the fixture pass.
 
 - [ ] **Step 6: Verify each invariant actually fires**
 
@@ -1736,12 +1697,18 @@ schema + validator → Task 5; CI wiring, local runner, release scaffolding, and
 the worktree protocol → Task 6. All eight bullet points of §4.1 are covered.
 
 **Out of scope for this plan (deliberately).** The `dyld-info-exports` wrapper
-used by Task 3 exists by the end of Task 2, so Task 3 can depend on it. The
-`validate_gap_ledger.py` module is written in Task 5 with its own copy of the
-schema-walking logic rather than importing from `validate_evidence.py` — the
-two validators have different schemas and different invariants, and coupling
-them would make both harder to change. This duplication is intentional and
-bounded to two small functions.
+used by Task 3 exists by the end of Task 2, so Task 3 can depend on it.
+
+The gap-ledger validator **imports** the JSON-Schema subset walker from
+`validate_evidence.py` rather than copying it. The two validators have
+different schemas and different invariants — those stay separate — but the
+schema-walking semantics ('required', 'additionalProperties', 'pattern',
+'minLength', 'minItems', 'enum') must not drift apart. The import was verified
+to work both when `scripts/lib/validate_gap_ledger.py` is invoked directly
+(Python puts the script's directory on `sys.path[0]`) and when the module is
+loaded via `importlib` from another working directory. `validate_evidence.py`
+is side-effect free at import time — its only module-level statement is the
+`if __name__ == "__main__"` guard.
 
 **Placeholder scan.** No `TBD`, `TODO`, "implement later", or "similar to
 Task N". Every code block contains the literal content to write. Every command
