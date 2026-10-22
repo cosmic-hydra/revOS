@@ -2438,7 +2438,7 @@ errors in the plan's own expectations:
    `validate_evidence.py` scans, so the command exited 0 having checked zero
    records. The implementer noticed and re-ran it with the record in place.
 9. The Task 3 re-review surfaced a **second, different** corpus defect: 26
-   `cf-runtime` records plus 1 `foundation-bridge` record describe the
+   `cf-runtime` records describe the
    *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
    and otool-exports both return status=tool-failed against this path"). That
    was true when observed and is false now. Unlike the slice contamination,
