@@ -2350,6 +2350,20 @@ errors in the plan's own expectations:
    schema-acceptance probe record was placed outside `subsystems/`, the only tree
    `validate_evidence.py` scans, so the command exited 0 having checked zero
    records. The implementer noticed and re-ran it with the record in place.
+10. The Task 4 review found three more defects in the brief's `capability-probe`
+    code, all now fixed: the envelope carried **no slice label** (so a
+    `missing` verdict meant "absent from the x86_64 slice" with nothing
+    downstream able to tell); an **empty or comment-only `--symbols` file
+    silently discarded the flag** and returned the entire export trie (3098
+    unrequested verdicts instead of 0, because the guard tested the filtered
+    content rather than the flag); and **space-separated flags mis-parsed** while
+    the `--help` advertised an exit code the wrapper could never return. Three
+    Minors folded into the same fix round: `__mh_*` (a public Mach-O/dyld ABI
+    constant) was classified `private`, so a system executable's entire output
+    was mislabeled; a changed `dyld_info` output shape would report
+    `ok, total 0` instead of failing; and the per-symbol loop spawned ~3
+    processes per symbol, which is pathological at the scale Task 5's audit
+    tool needs.
 9. The Task 3 re-review surfaced a **second, different** corpus defect: 26
    `cf-runtime` records plus 1 `foundation-bridge` record describe the
    *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
