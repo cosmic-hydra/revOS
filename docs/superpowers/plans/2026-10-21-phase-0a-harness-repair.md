@@ -453,7 +453,8 @@ The reported arch is parsed from the dyld_info output header rather than the
 **Interfaces:**
 - Consumes: `scripts/bin/dyld-info-exports` from Task 2 (invoked as a subprocess, not sourced).
 - Produces:
-  - `common.sh`: `is_cache_backed <path>` → returns 0 if the path is a dangling symlink that `dyld_info` can read, else 1. `assert_binary_present <path>` now sets `BIN_VALID` to `ok`, `cache-backed`, or `missing`. `emit_cache_backed <tool> <binary> <hint>` → JSON envelope with `status: "cache-backed"`.
+  - `common.sh`: `is_cache_backed <path>` → returns 0 if the path is a dangling symlink that `dyld_info` can read, else 1. `assert_binary_present <path>` now sets `BIN_VALID` to `ok`, `cache-backed`, or `missing`. `emit_cache_backed <tool> <binary> <hint>` → JSON envelope with `status: "cache-backed"`. `emit_invocation_error <tool> <binary> <msg>` → JSON envelope with `status: "invocation-error"`, exit code 2.
+  - `scripts/bin/dyld-info-exports`: its file-local `_emit_invocation_error` is replaced by `common.sh`'s `emit_invocation_error`, so the two emitters cannot drift. The Task 2 re-review flagged the duplication as a drift risk.
 
 - [ ] **Step 1: Add `is_cache_backed` and `emit_cache_backed` to `common.sh`**
 
@@ -556,13 +557,22 @@ fi
 # nm cannot open them. Fall back to the export trie instead of reporting a
 # misleading "binary not found".
 if [[ "${BIN_VALID:-missing}" == "cache-backed" ]]; then
-  fallback=$(bash scripts/bin/dyld-info-exports ${filter:+--filter="$filter"} "$BINARY" 2>/dev/null || true)
+  # The sibling wrapper, relative to THIS wrapper's own directory. Every
+  # wrapper does `cd "$(dirname "$0")"` at the top, so the cwd is already
+  # scripts/bin and the path "scripts/bin/dyld-info-exports" does NOT resolve
+  # (exit 127). Use the sibling form.
+  fallback=$(bash ./dyld-info-exports ${filter:+--filter="$filter"} "$BINARY" 2>/dev/null || true)
   if [[ -n "$fallback" ]] && printf '%s' "$fallback" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+    # kind is null, not "T": the export trie (LC_DYLD_EXPORTS_TRIE) carries an
+    # address and a name but NO symbol kind. nm distinguishes T/D/S/B/... and
+    # this fallback cannot. Labelling every export "T" would be a false claim
+    # about data symbols such as _dispatch_root_queues, and evidence records
+    # quote this output verbatim.
     printf '%s' "$fallback" | jq --arg source_tool "dyld_info" \
       '{tool: "nm", source_tool: $source_tool, status: .status, exit_code: .exit_code,
         duration_ms: .duration_ms,
-        observations: {symbols: [.observations.exports[] | {address, kind: "T", name, section: null}],
-                       total: .observations.total}}'
+        observations: {symbols: [.observations.exports[] | {address, kind: null, name, section: null}],
+                       total: .observations.total, kind_unknown: true}}'
     exit 0
   fi
   emit_cache_backed "nm" "$BINARY" "use scripts/bin/dyld-info-exports to read the export trie"
@@ -571,6 +581,43 @@ fi
 ```
 
 Move the `filter` extraction **above** this block so the fallback can use it. The final order in the file must be: `parse_tool_args` → filter/arch extraction → `assert_binary_present` → cache-backed fallback → tool-presence check → `nm` invocation. Apply the same reordering to the existing filter-extraction block that currently sits after the `assert_binary_present` call — delete it from its old position and place it before.
+
+- [ ] **Step 3b: Move the `invocation-error` emitter into `common.sh`**
+
+Task 2's `dyld-info-exports` grew a file-local `_emit_invocation_error`. Task 3 is
+the task that gives `common.sh` the full status vocabulary, so this is the moment
+to put it in one place.
+
+Add to `scripts/lib/common.sh`, next to the other emitters:
+
+```bash
+# Emit an invocation-error envelope. $3 is the failure message. Exit code 2,
+# distinct from 1 (tool-failed) and 127 (tool-not-installed).
+emit_invocation_error() {
+  local tool="$1"
+  local binary="$2"
+  local msg="$3"
+  local start="$WRAPPER_START_MS"
+  local now
+  now="$(_now_ms)"
+  local duration=0
+  if [[ -n "${start:-}" ]]; then duration=$(( now - start )); fi
+  jq -n \
+    --arg tool "$tool" \
+    --arg binary "$binary" \
+    --arg msg "$msg" \
+    --argjson duration "$duration" \
+    '{tool: $tool, binary: $binary, status: "invocation-error", exit_code: 2, duration_ms: $duration, error: $msg}'
+}
+```
+
+Then replace `dyld-info-exports`'s file-local `_emit_invocation_error` with calls
+to `emit_invocation_error`, and delete the local definition.
+
+**Note for Task 3's implementer:** do NOT bake any assumption about which slice
+the fallback reports. Task 5 changes `dyld-info-exports` to default to the
+host-native slice; the fallback must simply pass through whatever `arch` and
+`exports` the wrapper reports.
 
 - [ ] **Step 4: Make `otool-exports` report cache-backed status instead of failing**
 
