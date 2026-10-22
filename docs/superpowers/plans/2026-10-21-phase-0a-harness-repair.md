@@ -1092,7 +1092,7 @@ from here and must not redo them.
 |---|---|---|
 | What is wrong | the quoted **address** belongs to the wrong slice | a surrounding **sentence** describes superseded tooling behaviour |
 | Severity | data corruption — the datum itself is false | narrative only — the datum and its reproducer are still correct |
-| Scope | 11 of 12 `libdispatch` records | 26 `cf-runtime` records + 1 `foundation-bridge` record |
+| Scope | 11 of 12 `libdispatch` records | 26 `cf-runtime` records |
 | Fix | re-derive the address from the correct slice | update the sentence to describe current behaviour; **leave the quoted output and the reproducer alone** |
 
 Defect 2 in full: every `cf-runtime` record's `observation.summary` opens with
