@@ -1066,7 +1066,7 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
 
 ---
 
-### Task 5: Host-native default slice, and a corpus slice-attribution audit
+### Task 5: Host-native default slice, and a corpus consistency audit (slice attribution + tooling-state staleness)
 
 **Files:**
 - Modify: `scripts/bin/dyld-info-exports` (default slice selection)
@@ -1078,6 +1078,30 @@ git commit -m "feat(harness): add dyld_info to the evidence tool enum and add ca
 - Produces: `python3 scripts/lib/audit_slice_attribution.py [ROOT_DIR]` → exit 0 when every cited address is attributable to the slice its record claims, exit 1 with one line per violation. `scripts/bin/dyld-info-exports` with no `--arch` now selects the **host-native** slice.
 
 **Background — why this task exists.** Task 2's review found that `dyld_info -exports` on a fat dylib emits one section per slice, and that the original wrapper merged them under the first slice's arch label. Fixing that exposed a **pre-existing defect in the shipped evidence corpus**, which this task corrects.
+
+**There are TWO corpus defects, and they are different species.** Do not conflate them.
+
+| | Defect 1 — slice attribution | Defect 2 — tooling-state staleness |
+|---|---|---|
+| What is wrong | the quoted **address** belongs to the wrong slice | a surrounding **sentence** describes superseded tooling behaviour |
+| Severity | data corruption — the datum itself is false | narrative only — the datum and its reproducer are still correct |
+| Scope | 11 of 12 `libdispatch` records | 26 `cf-runtime` records + 1 `foundation-bridge` record |
+| Fix | re-derive the address from the correct slice | update the sentence to describe current behaviour; **leave the quoted output and the reproducer alone** |
+
+Defect 2 in full: every `cf-runtime` record's `observation.summary` opens with
+"CoreFoundation ships no standalone Mach-O on macOS 27 … `nm-symbols` and
+`otool-exports` both return `status=tool-failed` against this path". That was
+true when observed. **After Task 3 it is false** — `nm-symbols` now returns
+`status: "ok"` with `source_tool: "dyld_info"` and 3098 exports, and
+`otool-exports` reports `status: "cache-backed"`.
+
+**Defect 2 does NOT invalidate any claim.** The quoted excerpt
+(`0x0006A120  _CFRunLoopAddObserver`) is still correct, and the record's
+`reproducer` — `dyld_info -exports … | grep -w '_CFRunLoopAddObserver'` — still
+reproduces it byte-for-byte, because `dyld_info` was always the tool that
+produced it. Only the prose describing what the *wrappers* did is stale. The
+correct fix is to update the prose and change nothing else; the wrong fix is to
+re-derive the whole observation and overwrite a still-correct datum.
 
 Measured on this host:
 
@@ -1135,6 +1159,13 @@ Create `scripts/lib/audit_slice_attribution.py`. It must:
 6. For each pair, determine which slices place that symbol at that address. A pair is **CORRECT** when the claimed arch is among them. A pair is **MISMATCH** when it is not — that is the defect: the record quotes an address from a slice it does not claim.
 7. Print one line per violation as `MISMATCH <file> <symbol> <address> claimed=<arch> actual=<slices>` and exit 1 if any exist, else print the count and exit 0.
 
+8. Additionally, flag any record whose `observation.summary` asserts a wrapper
+   status that the current harness no longer produces — specifically a summary
+   claiming `tool-failed` for `nm-symbols` or `otool-exports` against a
+   cache-backed path. Report these as `STALE-NARRATIVE <file>` and exit 1.
+   This is a separate check from the address attribution, and it is a text
+   check, not a symbol check.
+
 The tool must not modify anything. It is a detector; the correction is a separate, explicit step.
 
 - [ ] **Step 4: Run the audit and confirm it detects the known defect**
@@ -1167,6 +1198,52 @@ dyld_info -arch arm64e -exports /usr/lib/system/introspection/libdispatch.dylib 
 dyld_info -arch x86_64  -exports /usr/lib/system/introspection/libdispatch.dylib | grep -E '__dispatch_source_type_data_add$'
 ```
 The record currently quotes the x86_64 address (`0x00068240`). Correct it to the arm64e address and fix the accompanying count reasoning — the record's current text divides a merged 38 by two arches to obtain 19; after correction it should derive 19 from a single arm64e section.
+
+- [ ] **Step 5b: Correct the tooling-state-stale narratives**
+
+For each of the 26 `cf-runtime` records and the 1 `foundation-bridge` record
+whose `observation.summary` describes the pre-Task-3 wrapper behaviour:
+
+1. **Do not change `observation.raw_output_excerpt`.** The quoted output is
+   still exactly what the recorded `tool_invocation` produces.
+2. **Do not change `observation.tool_invocation`.** It is still the command
+   that produced the quoted output.
+3. **Do not change `reproducer`.** It still reproduces the claim.
+4. **Do change the stale sentence in `observation.summary`** so it describes
+   current behaviour. The sentence that must go reads (in substance):
+   "`nm-symbols` and `otool-exports` both return `status=tool-failed` against
+   this path". Replace it with a statement of what the harness does now:
+   the framework path is a dangling symlink into the arm64e dyld shared cache;
+   since Phase 0a the harness reads it directly — `nm-symbols` returns
+   `status: "ok"` with `source_tool: "dyld_info"` and 3098 exports, and
+   `otool-exports` reports `status: "cache-backed"`.
+5. Leave `claim`, `claim_status`, `confidence`, `subject`, `cross_reference`,
+   and `source_artifact` untouched. The claim is unaffected.
+
+Verify one record end to end after editing: the `reproducer` must still produce
+the quoted line, and the summary must no longer claim `tool-failed`.
+
+- [ ] **Step 5c: Guard the cache-backed fallback against a malformed child payload**
+
+`nm-symbols`'s cache-backed success branch runs `jq` over the child envelope and
+reads `.observations.exports[]`. If a child ever returned `status: "ok"` without
+`observations.exports`, that `jq` would fail and, under `set -e`/`pipefail`, the
+wrapper would die with **zero bytes** — the exact failure mode this whole phase
+exists to eliminate. It is unreachable with the in-repo child, which always
+emits `observations.exports`, but it costs one condition to close.
+
+Add the child-shape guard alongside the existing `.status == "ok"` guard, so the
+fallback only proceeds when the child's payload actually carries exports.
+
+- [ ] **Step 5d: Document the filter-dialect split in the two wrappers**
+
+The on-disk path validates `--filter` with **awk** (POSIX ERE); the cache-backed
+path delegates to `dyld-info-exports`, which validates with **jq** (Oniguruma).
+The same argument can therefore succeed on one path and fail on the other:
+`--filter='a{2'` is `tool-failed` on-disk and `ok` cache-backed. The on-disk
+behaviour is the documented one, and it replaces what used to be a zero-byte
+crash, so this is an improvement — but a caller should be told. Add one line to
+each wrapper's `--help` stating which dialect that path accepts.
 
 - [ ] **Step 6: Re-run the audit until it is clean**
 
@@ -2226,6 +2303,15 @@ errors in the plan's own expectations:
    matching every other tool-failed path. (`emit_tool_missing` exiting 0 is a
    separate, deliberate house convention, consistent across all wrappers, and
    is left alone.)
+7. The Task 3 re-review surfaced a **second, different** corpus defect: 26
+   `cf-runtime` records plus 1 `foundation-bridge` record describe the
+   *pre-Task-3* wrapper behaviour in their `observation.summary` ("nm-symbols
+   and otool-exports both return status=tool-failed against this path"). That
+   was true when observed and is false now. Unlike the slice contamination,
+   the quoted output and the `reproducer` are **still correct and still
+   reproduce exactly** — only the prose is stale. Task 5 now audits and
+   corrects this as a second dimension, and the audit tool gained a
+   `STALE-NARRATIVE` check so the class cannot recur.
 
 **Every `jq` program in this plan was executed against real output before the
 plan was committed.** Three defects were found and fixed in the process, and the
