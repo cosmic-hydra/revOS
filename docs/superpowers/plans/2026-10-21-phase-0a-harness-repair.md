@@ -445,6 +445,7 @@ The reported arch is parsed from the dyld_info output header rather than the
 - Modify: `scripts/lib/common.sh` (add `is_cache_backed`, `emit_cache_backed`; extend `assert_binary_present`)
 - Modify: `scripts/bin/nm-symbols` (fallback path)
 - Modify: `scripts/bin/otool-exports` (fallback path)
+- Modify: `scripts/bin/output-schema.json` (add `cache-backed` to the `status` enum)
 
 **Interfaces:**
 - Consumes: `scripts/bin/dyld-info-exports` from Task 2 (invoked as a subprocess, not sourced).
@@ -586,6 +587,20 @@ if [[ "${BIN_VALID:-missing}" == "cache-backed" ]]; then
 fi
 ```
 
+- [ ] **Step 4b: Add `cache-backed` to the wrapper-output status enum**
+
+`scripts/bin/output-schema.json` constrains `status` to
+`["ok", "tool-not-installed", "tool-failed", "invocation-error", "rea-cli's-subcommand-not-found"]`.
+The new `emit_cache_backed` emits `status: "cache-backed"`, which is not in that
+enum — the wrapper would violate the contract it claims to satisfy. Add it:
+
+```json
+    "status": {
+      "type": "string",
+      "enum": ["ok", "tool-not-installed", "tool-failed", "cache-backed", "invocation-error", "rea-cli's-subcommand-not-found"]
+    },
+```
+
 - [ ] **Step 5: Verify the fallback works on CoreFoundation**
 
 Run:
@@ -659,6 +674,7 @@ source_tool=dyld_info; the on-disk path is unchanged."
 
 **Files:**
 - Modify: `evidence/schema.json` (`observation.tool` enum)
+- Modify: `scripts/bin/output-schema.json` (`tool` enum)
 - Create: `scripts/bin/capability-probe`
 
 **Interfaces:**
@@ -678,6 +694,22 @@ and replace it with:
         "tool": {
           "enum": ["otool", "nm", "strings", "class-dump", "dsymutil", "dtrace", "dyld_info", "rea", "other"]
         },
+```
+
+- [ ] **Step 1b: Add `dyld_info` to the wrapper-output schema's tool enum**
+
+There are TWO schemas, and the plan originally named only one.
+`evidence/schema.json` constrains evidence records. `scripts/bin/output-schema.json`
+constrains the envelope every wrapper under `scripts/bin/` emits, and its `tool`
+enum is `["otool", "nm", "strings", "class-dump", "rea"]` — with no `dyld_info`.
+Task 2's `dyld-info-exports` already emits `tool: "dyld_info"`, so it violates
+the wrapper contract it documents. Fix it here too:
+
+```json
+    "tool": {
+      "type": "string",
+      "enum": ["otool", "nm", "strings", "class-dump", "dyld_info", "rea"]
+    },
 ```
 
 - [ ] **Step 2: Prove the schema now accepts `dyld_info` and still rejects junk**
@@ -1380,6 +1412,7 @@ reverification.status='not-yet-checked'; Phase 0b resolves it."
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
+- Create: `scripts/lib/validate_wrapper_output.py`
 - Create: `scripts/bin/revos-ci`
 - Create: `VERSION`
 - Create: `CHANGELOG.md`
@@ -1450,6 +1483,144 @@ Nothing yet.
 [Unreleased]: https://github.com/cosmic-hydra/revOS/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/cosmic-hydra/revOS/releases/tag/v0.1.0
 ```
+
+- [ ] **Step 2b: Create the wrapper-output validator**
+
+Nothing currently validates a wrapper's output against `scripts/bin/output-schema.json`.
+That is why Task 2 could ship `tool: "dyld_info"` — a value the schema's enum
+forbids — without anything noticing. The contract is documentation-by-convention
+only. Close it.
+
+Create `scripts/lib/validate_wrapper_output.py` with content:
+
+```python
+#!/usr/bin/env python3
+"""Validate one wrapper envelope against scripts/bin/output-schema.json.
+
+Usage:
+  scripts/lib/validate_wrapper_output.py <envelope.json> [<envelope.json> ...]
+
+Reuses the JSON-Schema subset walker from validate_evidence.py so the two
+validators share one set of semantics. Exit 0 when every envelope conforms,
+1 when any envelope violates the schema.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from validate_evidence import _walk
+
+SCHEMA_FILE = Path(__file__).resolve().parent.parent / "bin" / "output-schema.json"
+
+
+def load_schema() -> dict[str, Any]:
+    with SCHEMA_FILE.open() as fh:
+        return json.load(fh)
+
+
+def main(argv: list[str]) -> int:
+    paths = argv[1:]
+    if not paths:
+        print("usage: validate_wrapper_output.py <envelope.json> [...]", file=sys.stderr)
+        return 2
+    try:
+        schema = load_schema()
+    except Exception as exc:  # noqa: BLE001
+        print(f"schema load failure: {exc}", file=sys.stderr)
+        return 2
+
+    failures = 0
+    for raw_path in paths:
+        path = Path(raw_path)
+        try:
+            with path.open() as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FAIL {path.name}: cannot read envelope: {exc}")
+            failures += 1
+            continue
+        errors = _walk(payload, schema, path.name)
+        if errors:
+            failures += 1
+            for err in errors:
+                print(f"FAIL {path.name}: {err}")
+        else:
+            print(f"ok {path.name}")
+    print(f"validated {len(paths)} wrapper envelopes: {len(paths) - failures} ok, {failures} failing")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
+```
+
+- [ ] **Step 2c: Add a wrapper-output job to `revos-ci` and to CI**
+
+In `scripts/bin/revos-ci`, add a job that runs every wrapper against a control
+binary and validates each envelope:
+
+```bash
+job_validate_wrapper_output() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' RETURN
+  local control=/usr/lib/system/libsystem_pthread.dylib
+  local n=0
+  for w in scripts/bin/*; do
+    [[ -x "$w" ]] || continue
+    case "$(basename "$w")" in
+      rea-call) continue ;;   # needs network + npx; covered by no gate today
+      revos-ci) continue ;;   # this script
+    esac
+    bash "$w" "$control" > "$tmpdir/$(basename "$w").json" 2>/dev/null || true
+    n=$((n + 1))
+  done
+  python3 scripts/lib/validate_wrapper_output.py "$tmpdir"/*.json
+}
+```
+
+and register it in the `run_job` list:
+
+```bash
+run_job validate-wrapper-output job_validate_wrapper_output
+```
+
+Add the matching CI job:
+
+```yaml
+  validate-wrapper-output:
+    name: wrapper envelopes conform to output-schema.json
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate wrapper envelopes
+        run: |
+          set -euo pipefail
+          tmpdir=$(mktemp -d)
+          for w in scripts/bin/*; do
+            [ -x "$w" ] || continue
+            case "$(basename "$w")" in
+              rea-call) continue ;;
+              revos-ci) continue ;;
+            esac
+            bash "$w" /usr/lib/system/libsystem_pthread.dylib > "$tmpdir/$(basename "$w").json" 2>/dev/null || true
+          done
+          python3 scripts/lib/validate_wrapper_output.py "$tmpdir"/*.json
+```
+
+This job must run on `macos-latest`, not `ubuntu-latest`: the control binary
+`/usr/lib/system/libsystem_pthread.dylib` is macOS-specific.
 
 - [ ] **Step 3: Create the local CI runner**
 
