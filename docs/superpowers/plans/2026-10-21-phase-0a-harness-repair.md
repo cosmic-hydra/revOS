@@ -4,7 +4,7 @@
 
 **Goal:** Make revOS's harness trustworthy — CI green on `main`, the dyld-shared-cache blindness fixed, and the gap-ledger machinery in place — so that every later phase builds on a foundation that actually works.
 
-**Architecture:** Six bounded tasks, each independently testable and committable. Task 1 repairs CI and the real warnings it surfaces. Task 2 adds a `dyld_info -exports` wrapper, which is the only way to read the export trie of a cache-backed image on macOS 27. Task 3 teaches the existing wrappers to detect cache-backed binaries and fall back to `dyld_info` automatically, so `nm-symbols` works on CoreFoundation. Task 4 extends the evidence schema with `dyld_info` and adds a `capability-probe` primitive. Task 5 adds the gap-ledger schema and its validator. Task 6 wires everything into CI, adds a local CI runner, and lays down release scaffolding.
+**Architecture:** Seven bounded tasks, each independently testable and committable. Task 1 repairs CI and the real warnings it surfaces. Task 2 adds a `dyld_info -exports` wrapper, which is the only way to read the export trie of a cache-backed image on macOS 27. Task 3 teaches the existing wrappers to detect cache-backed binaries and fall back to `dyld_info` automatically, so `nm-symbols` works on CoreFoundation. Task 4 extends the evidence schema with `dyld_info` and adds a `capability-probe` primitive. Task 5 makes the wrapper default to the host-native slice, adds a corpus slice-attribution audit tool, and corrects the wrong-slice addresses that Task 2's review exposed in the shipped libdispatch evidence. Task 6 adds the gap-ledger schema and its validator. Task 7 wires everything into CI, adds a local CI runner, and lays down release scaffolding.
 
 **Tech Stack:** Bash 3.2 (macOS default) + `jq`, Python 3 (stdlib only), `shellcheck`, GitHub Actions, CMake (later phases).
 
@@ -15,7 +15,7 @@
 - **`jq` is a hard dependency** of every wrapper. It is already used in all six wrappers; keep using it for JSON construction rather than hand-rolled string concatenation.
 - **Every wrapper emits exactly one JSON object on stdout**, conforming to `scripts/bin/output-schema.json`. No stray output, no banner text.
 - **Every wrapper's `--help` exits 0 and prints usage to stdout.**
-- **Commit format:** `chore(harness): …` for Task 1 and Task 6, `feat(harness): …` for Tasks 2–5. Never `feat(<subsystem>):` — subsystem commits belong to subsystem agents.
+- **Commit format:** `chore(harness): …` for Task 1 and Task 7, `feat(harness): …` for Tasks 2–6. Never `feat(<subsystem>):` — subsystem commits belong to subsystem agents.
 - **Stage only the files named in the task.** Never `git add -A`. A parallel agent may be working in the same tree; verify with `git diff --cached --name-only` before every commit.
 - **No file moves in this phase.** `scripts/bin/output-schema.json` and `scripts/lib/validate_evidence.py` stay exactly where they are; CI selects shell files by shebang instead of by directory glob.
 - **Do not modify anything under `subsystems/`.** Those 76 records are evidence and are owned by the subsystem agents.
@@ -32,16 +32,19 @@
 | `scripts/bin/nm-symbols` | `nm -gU` symbol dump | Modify — Tasks 1, 3 |
 | `scripts/bin/otool-exports` | `otool -L` / `-Iv` dump | Modify — Task 3 |
 | `scripts/bin/rea-call` | REA CLI passthrough | Modify — Task 1 |
-| `scripts/bin/dyld-info-exports` | Export-trie reader that works on cache-backed images | Create — Task 2 |
+| `scripts/bin/dyld-info-exports` | Export-trie reader that works on cache-backed images | Create — Task 2, Modify — Task 5 |
 | `scripts/bin/capability-probe` | Per-symbol capability probe (works / traps / missing / private) | Create — Task 4 |
-| `scripts/bin/revos-ci` | Local mirror of the CI job list | Create — Task 6 |
+| `scripts/bin/revos-ci` | Local mirror of the CI job list | Create — Task 7 |
 | `evidence/schema.json` | Evidence record JSON-Schema | Modify — Task 4 |
-| `gap-ledger/schema.json` | Gap record JSON-Schema | Create — Task 5 |
-| `scripts/lib/validate_gap_ledger.py` | Gap-ledger validator | Create — Task 5 |
-| `VERSION` | Semver string, one line | Create — Task 6 |
-| `CHANGELOG.md` | Release notes | Create — Task 6 |
-| `AGENTS.md` | Agent protocol | Modify — Task 6 |
-| `README.md` | Project front page | Modify — Task 6 |
+| `scripts/lib/audit_slice_attribution.py` | Attributes every cited corpus address to a slice | Create — Task 5 |
+| `subsystems/libdispatch/evidence/` | Sprint-1 libdispatch evidence; wrong-slice addresses corrected | Modify — Task 5 |
+| `gap-ledger/schema.json` | Gap record JSON-Schema | Create — Task 6 |
+| `scripts/lib/validate_gap_ledger.py` | Gap-ledger validator | Create — Task 6 |
+| `scripts/lib/validate_wrapper_output.py` | Validates wrapper envelopes against the wrapper-output schema | Create — Task 7 |
+| `VERSION` | Semver string, one line | Create — Task 7 |
+| `CHANGELOG.md` | Release notes | Create — Task 7 |
+| `AGENTS.md` | Agent protocol | Modify — Task 7 |
+| `README.md` | Project front page | Modify — Task 7 |
 
 ---
 
@@ -2039,9 +2042,11 @@ Expected: the newest run reports `completed success`. If the `lint-shell` job st
 
 **Spec coverage.** Every Phase 0a requirement from spec §4.1 maps to a task:
 CI repair → Task 1; `dyld-info-exports` → Task 2; cache-backed detection → Task 3;
-`dyld_info` in the schema enum → Task 4; `capability-probe` → Task 4; gap-ledger
-schema + validator → Task 5; CI wiring, local runner, release scaffolding, and
-the worktree protocol → Task 6. All eight bullet points of §4.1 are covered.
+`dyld_info` in the schema enum → Task 4; `capability-probe` → Task 4; host-native
+default slice + corpus slice-attribution audit + record correction → Task 5;
+gap-ledger schema + validator → Task 6; CI wiring, local runner, release
+scaffolding, and the worktree protocol → Task 7. All eight bullet points of §4.1
+are covered, plus the corpus-correction work that Task 2's review exposed.
 
 **Out of scope for this plan (deliberately).** The `dyld-info-exports` wrapper
 used by Task 3 exists by the end of Task 2, so Task 3 can depend on it.
