@@ -568,8 +568,10 @@ if [[ "${BIN_VALID:-missing}" == "cache-backed" ]]; then
     # this fallback cannot. Labelling every export "T" would be a false claim
     # about data symbols such as _dispatch_root_queues, and evidence records
     # quote this output verbatim.
+    # `binary` is REQUIRED by scripts/bin/output-schema.json, so the fallback
+    # envelope must carry it. The wrapper's own envelope has it; pass it through.
     printf '%s' "$fallback" | jq --arg source_tool "dyld_info" \
-      '{tool: "nm", source_tool: $source_tool, status: .status, exit_code: .exit_code,
+      '{tool: "nm", binary: .binary, source_tool: $source_tool, status: .status, exit_code: .exit_code,
         duration_ms: .duration_ms,
         observations: {symbols: [.observations.exports[] | {address, kind: null, name, section: null}],
                        total: .observations.total, kind_unknown: true}}'
@@ -2149,6 +2151,17 @@ errors in the plan's own expectations:
    branch-and-review workflow the plan actually executes, an implementer
    commits to its branch and the controller merges to `main` after the task
    review passes. The commit steps now say so.
+3. The Task 3 fallback's jq program omitted `binary`, which
+   `scripts/bin/output-schema.json` lists as REQUIRED. The literal plan code
+   therefore emitted a schema-invalid envelope. The implementer added
+   `binary: .binary` and demonstrated that the brief's version fails the
+   repo's own `_walk` with "missing required key 'binary'".
+4. `scripts/bin/otool-exports` was the only wrapper that exited **0** on
+   `status: "tool-failed"`; `nm-symbols`, `strings-grep`, `class-dump-types`
+   and `dyld-info-exports` all exit **1**. Task 3's brief changed it to
+   `exit 1`, which makes it conform to the house convention rather than
+   diverge from it. The implementer flagged the behaviour change rather than
+   making it silently.
 
 **Every `jq` program in this plan was executed against real output before the
 plan was committed.** Three defects were found and fixed in the process, and the
